@@ -102,3 +102,48 @@ func (s *Service) GetTrip(
 
 	return trip, nil
 }
+
+func (s *Service) FinishTrip(
+	ctx context.Context,
+	id uuid.UUID,
+) (repository.Trip, error) {
+	if id == uuid.Nil {
+		return repository.Trip{}, ErrInvalidTrip
+	}
+
+	var completedTrip repository.Trip
+
+	err := s.txManager.Do(ctx, func(txCtx context.Context) error {
+		trip, err := s.repo.FinishTrip(
+			txCtx,
+			id,
+			time.Now().UTC(),
+		)
+		if err != nil {
+			return err
+		}
+
+		previousStatus := "active"
+		reason := "trip finished"
+
+		history := repository.StatusHistory{
+			TripID:     id,
+			FromStatus: &previousStatus,
+			ToStatus:   "completed",
+			Reason:     &reason,
+		}
+
+		if err := s.repo.AddStatusHistory(txCtx, history); err != nil {
+			return err
+		}
+
+		completedTrip = trip
+		return nil
+	})
+
+	if err != nil {
+		return repository.Trip{}, fmt.Errorf("finish trip: %w", err)
+	}
+
+	return completedTrip, nil
+}
