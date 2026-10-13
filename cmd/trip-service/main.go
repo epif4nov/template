@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -12,11 +11,15 @@ import (
 	"os/signal"
 	"syscall"
 
+	api "github.com/epif4nov/template/internal/generated"
+	"github.com/epif4nov/template/internal/httpapi"
+	"github.com/epif4nov/template/internal/repository"
+	"github.com/epif4nov/template/internal/service"
+	"github.com/epif4nov/template/internal/transaction"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/epif4nov/template/internal/config"
-	api "github.com/epif4nov/template/internal/generated"
 )
 
 func main() {
@@ -74,32 +77,29 @@ func run() error {
 
 	logger.Info("database connected")
 
-	// 4. Создаём HTTP-роутер.
+	// 4. Создаём сервис и подключаем HTTP-обработчики.
+	repo := repository.New(pool)
+	txManager := transaction.NewManager(pool, cfg.DatabaseQueryTimeout)
+	tripService := service.New(repo, txManager)
+
+	handler := httpapi.New(
+		tripService,
+		pool,
+		cfg.DatabaseQueryTimeout,
+		logger,
+	)
+
 	router := chi.NewRouter()
 
-	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, api.HealthResponse{
-			Status: "ok",
-		})
-	})
-
-	router.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(
-			r.Context(),
-			cfg.DatabaseQueryTimeout,
-		)
-		defer cancel()
-
-		if err := pool.Ping(ctx); err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, api.HealthResponse{
-				Status: "unavailable",
-			})
-			return
-		}
-
-		writeJSON(w, http.StatusOK, api.HealthResponse{
-			Status: "ok",
-		})
+	api.HandlerWithOptions(handler, api.ChiServerOptions{
+		BaseRouter: router,
+		ErrorHandlerFunc: func(
+			w http.ResponseWriter,
+			r *http.Request,
+			err error,
+		) {
+			handler.InvalidParameter(w, r, err)
+		},
 	})
 
 	// 5. Настраиваем HTTP-сервер.
@@ -151,10 +151,4 @@ func run() error {
 
 	logger.Info("HTTP server stopped")
 	return nil
-}
-
-func writeJSON(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
 }
