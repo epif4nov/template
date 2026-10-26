@@ -84,3 +84,7 @@ func validCoordinates(point Coordinates) bool {
 		point.Longitude >= -180 &&
 		point.Longitude <= 180
 }
+
+func (t *Trip) ID() uuid.UUID {
+	return t.id
+}
