@@ -26,7 +26,8 @@ generate:
 		contracts/openapi/trip-service.openapi.yaml
 
 test:
-	CGO_ENABLED=1 go test -race ./...
+	@set -e; set -a; source .env; set +a; \
+	CGO_ENABLED=1 go test -race -count=2 ./...
 
 build:
 	go build ./...
