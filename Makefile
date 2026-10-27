@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: migrate migrate-down migrate-status run generate test build
+.PHONY: migrate migrate-down migrate-status run generate test test-integration lint build
 
 migrate:
 	@set -a; source .env; set +a; \
@@ -19,6 +19,7 @@ run:
 	go run ./cmd/trip-service
 
 generate:
+	go generate -x ./internal/usecase/trip/... ./internal/http/trip/...
 	go tool oapi-codegen \
 		-generate types,chi-server \
 		-package api \
@@ -26,8 +27,15 @@ generate:
 		contracts/openapi/trip-service.openapi.yaml
 
 test:
-	@set -e; set -a; source .env; set +a; \
 	CGO_ENABLED=1 go test -race -count=2 ./...
+	go test -cover ./internal/domain/... ./internal/usecase/...
+
+test-integration:
+	@set -e; set -a; if [[ -f .env ]]; then source .env; fi; set +a; \
+	CGO_ENABLED=1 go test -race -count=2 -tags=integration ./internal/repository/trip/...
+
+lint:
+	golangci-lint run ./...
 
 build:
 	go build ./...

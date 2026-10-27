@@ -47,6 +47,8 @@ linters:
           files:
             - "**/internal/domain/**"
           deny:
+            - pkg: github.com/epif4nov/template/internal/generated
+              desc: business logic must not depend on OpenAPI
             - pkg: net/http
               desc: домен не знает про транспорт
             - pkg: github.com/go-chi/chi
@@ -61,6 +63,8 @@ linters:
           files:
             - "**/internal/usecase/**"
           deny:
+            - pkg: github.com/epif4nov/template/internal/generated
+              desc: business logic must not depend on OpenAPI
             - pkg: net/http
               desc: usecase не знает про транспорт
             - pkg: github.com/go-chi/chi
@@ -69,6 +73,15 @@ linters:
               desc: usecase работает через интерфейсы, а не через драйвер бд
             - pkg: github.com/Masterminds/squirrel
               desc: usecase не строит SQL
+
+        transport:
+          files:
+            - "**/internal/http/**"
+          deny:
+            - pkg: github.com/epif4nov/template/internal/repository
+              desc: транспорт зависит от интерфейсов usecase
+            - pkg: github.com/epif4nov/template/internal/infra
+              desc: инфраструктуру связывает container
 
     # Запрещает обращения через идентификатор с подчёркиванием, поэтому пакеты
     # называем без snake_case: internal/adapter/http, а не internal/adapter/http_server.
