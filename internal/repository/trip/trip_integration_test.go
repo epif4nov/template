@@ -1,4 +1,6 @@
-package service_test
+//go:build integration
+
+package trip_test
 
 import (
 	"context"
@@ -10,9 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/epif4nov/template/internal/repository"
-	"github.com/epif4nov/template/internal/service"
-	"github.com/epif4nov/template/internal/transaction"
+	"github.com/epif4nov/template/internal/infra/postgres/transaction"
+	repository "github.com/epif4nov/template/internal/repository/trip"
 )
 
 func openTestPool(t *testing.T) *pgxpool.Pool {
@@ -20,7 +21,7 @@ func openTestPool(t *testing.T) *pgxpool.Pool {
 
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		t.Skip("DATABASE_URL is not set")
+		t.Fatal("DATABASE_URL is required for integration tests")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -55,7 +56,7 @@ func TestTripLifecycle(t *testing.T) {
 	pool := openTestPool(t)
 	repo := repository.New(pool)
 	manager := transaction.NewManager(pool, 5*time.Second)
-	svc := service.New(repo, manager)
+	svc := newApplication(repo, manager)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -76,6 +77,17 @@ func TestTripLifecycle(t *testing.T) {
 		}
 	})
 
+	fetched, err := repo.Fetch(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("fetch created trip: %v", err)
+	}
+	if fetched.ID() != created.ID || fetched.UserID() != created.UserID || fetched.DriverID() != created.DriverID || fetched.Price() != created.Price || fetched.FinishedAt() != nil {
+		t.Fatal("persisted trip fields changed")
+	}
+	_, err = repo.Fetch(ctx, uuid.New())
+	if !errors.Is(err, repository.ErrTripNotFound) {
+		t.Fatalf("expected missing trip, got %v", err)
+	}
 	if created.Status != "active" {
 		t.Fatalf("expected active, got %s", created.Status)
 	}
@@ -139,13 +151,7 @@ func TestRollbackWhenHistoryInsertFails(t *testing.T) {
 			return err
 		}
 
-		return repo.AddStatusHistory(
-			txCtx,
-			repository.StatusHistory{
-				TripID:   trip.ID,
-				ToStatus: "invalid",
-			},
-		)
+		return repo.AddStatusHistory(txCtx, trip.ID, nil, "invalid", "test rollback")
 	})
 
 	if err == nil {

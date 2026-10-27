@@ -1,4 +1,4 @@
-package repository
+package trip
 
 import (
 	"context"
@@ -11,10 +11,11 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/epif4nov/template/internal/transaction"
+	domain "github.com/epif4nov/template/internal/domain/trip"
+	"github.com/epif4nov/template/internal/infra/postgres/transaction"
 )
 
-var ErrDriverBusy = errors.New("driver busy")
+var ErrDriverBusy = domain.ErrDriverBusy
 
 type Trip struct {
 	ID uuid.UUID

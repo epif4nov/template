@@ -1,4 +1,4 @@
-package repository
+package trip
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	"github.com/epif4nov/template/internal/transaction"
+	"github.com/epif4nov/template/internal/infra/postgres/transaction"
 )
 
 type StatusHistory struct {
@@ -19,7 +19,7 @@ type StatusHistory struct {
 	Reason *string
 }
 
-func (r *Repository) AddStatusHistory(
+func (r *Repository) insertStatusHistory(
 	ctx context.Context,
 	history StatusHistory,
 ) error {

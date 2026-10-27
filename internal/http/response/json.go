@@ -1,4 +1,4 @@
-package httpapi
+package response
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 	api "github.com/epif4nov/template/internal/generated"
 )
 
-func decodeTripData(w http.ResponseWriter, r *http.Request) (api.TripData, error) {
+func DecodeTripData(w http.ResponseWriter, r *http.Request) (api.TripData, error) {
 	var input api.TripData
 
 	contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
@@ -89,13 +89,13 @@ func require(fields map[string]json.RawMessage, name string) error {
 	return nil
 }
 
-func writeJSON(w http.ResponseWriter, status int, value any) {
+func JSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
 
-func writeProblem(
+func Problem(
 	w http.ResponseWriter,
 	r *http.Request,
 	status int,

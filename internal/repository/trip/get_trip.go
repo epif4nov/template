@@ -1,4 +1,4 @@
-package repository
+package trip
 
 import (
 	"context"
@@ -9,10 +9,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/epif4nov/template/internal/transaction"
+	domain "github.com/epif4nov/template/internal/domain/trip"
+	"github.com/epif4nov/template/internal/infra/postgres/transaction"
 )
 
-var ErrTripNotFound = errors.New("trip not found")
+var ErrTripNotFound = domain.ErrTripNotFound
 
 func (r *Repository) GetTrip(
 	ctx context.Context,

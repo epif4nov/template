@@ -1,4 +1,6 @@
-package service_test
+//go:build integration
+
+package trip_test
 
 import (
 	"context"
@@ -9,16 +11,15 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/epif4nov/template/internal/repository"
-	"github.com/epif4nov/template/internal/service"
-	"github.com/epif4nov/template/internal/transaction"
+	"github.com/epif4nov/template/internal/infra/postgres/transaction"
+	repository "github.com/epif4nov/template/internal/repository/trip"
 )
 
 func TestConcurrentCreateTrip(t *testing.T) {
 	pool := openTestPool(t)
 	repo := repository.New(pool)
 	manager := transaction.NewManager(pool, 10*time.Second)
-	svc := service.New(repo, manager)
+	svc := newApplication(repo, manager)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -122,7 +123,7 @@ func TestConcurrentFinishTrip(t *testing.T) {
 	pool := openTestPool(t)
 	repo := repository.New(pool)
 	manager := transaction.NewManager(pool, 10*time.Second)
-	svc := service.New(repo, manager)
+	svc := newApplication(repo, manager)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

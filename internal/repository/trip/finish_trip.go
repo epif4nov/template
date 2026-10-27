@@ -1,18 +1,18 @@
-package repository
+package trip
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 
-	"github.com/epif4nov/template/internal/transaction"
+	domain "github.com/epif4nov/template/internal/domain/trip"
+	"github.com/epif4nov/template/internal/infra/postgres/transaction"
 )
 
-var ErrTripCompleted = errors.New("trip already completed")
+var ErrTripCompleted = domain.ErrTripCompleted
 
 func (r *Repository) FinishTrip(
 	ctx context.Context,

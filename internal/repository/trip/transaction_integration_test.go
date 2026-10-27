@@ -1,4 +1,6 @@
-package service_test
+//go:build integration
+
+package trip_test
 
 import (
 	"context"
@@ -8,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/epif4nov/template/internal/repository"
-	"github.com/epif4nov/template/internal/transaction"
+	"github.com/epif4nov/template/internal/infra/postgres/transaction"
+	repository "github.com/epif4nov/template/internal/repository/trip"
 )
 
 func TestNestedTransactionRollback(t *testing.T) {
