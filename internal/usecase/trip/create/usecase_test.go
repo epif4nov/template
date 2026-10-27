@@ -174,3 +174,27 @@ func TestExecuteHistoryError(t *testing.T) {
 		t.Fatal("expected nil result")
 	}
 }
+
+func TestExecuteDriverBusy(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	repo := NewMocktripRepository(ctrl)
+	tx := NewMocktxManager(ctrl)
+	tx.EXPECT().Do(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) })
+	repo.EXPECT().Save(gomock.Any(), gomock.Any()).Return(trip.ErrDriverBusy)
+	got, err := create.New(repo, tx, fixedClock).Execute(context.Background(), validInput())
+	if got != nil || !errors.Is(err, trip.ErrDriverBusy) {
+		t.Fatalf("got %v, %v", got, err)
+	}
+}
+
+func TestExecuteTransactionError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	repo := NewMocktripRepository(ctrl)
+	tx := NewMocktxManager(ctrl)
+	failure := errors.New("begin failed")
+	tx.EXPECT().Do(gomock.Any(), gomock.Any()).Return(failure)
+	got, err := create.New(repo, tx, fixedClock).Execute(context.Background(), validInput())
+	if got != nil || !errors.Is(err, failure) {
+		t.Fatalf("got %v, %v", got, err)
+	}
+}
