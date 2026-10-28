@@ -20,7 +20,7 @@ func TestProblem(t *testing.T) {
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			status, body := domainerror.Problem(fmt.Errorf("wrapped: %w", tc.err))
-			if status != tc.status || body.Status != int32(tc.status) || body.Code != tc.code || body.Title == "" || body.Type == "" || body.Detail == nil {
+			if status != tc.status || int(body.Status) != tc.status || body.Code != tc.code || body.Title == "" || body.Type == "" || body.Detail == nil {
 				t.Fatalf("unexpected problem: %d %+v", status, body)
 			}
 			if strings.Contains(*body.Detail, "secret") {

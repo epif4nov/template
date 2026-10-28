@@ -12,11 +12,13 @@ import (
 
 	"github.com/epif4nov/template/internal/config"
 	api "github.com/epif4nov/template/internal/generated"
+	"github.com/epif4nov/template/internal/http/middleware"
 	"github.com/epif4nov/template/internal/http/response"
 	createhandler "github.com/epif4nov/template/internal/http/trip/create"
 	finishhandler "github.com/epif4nov/template/internal/http/trip/finish"
 	gethandler "github.com/epif4nov/template/internal/http/trip/get"
 	"github.com/epif4nov/template/internal/infra/postgres/transaction"
+	"github.com/epif4nov/template/internal/infra/telemetry"
 	repository "github.com/epif4nov/template/internal/repository/trip"
 	"github.com/epif4nov/template/internal/usecase/trip/create"
 	"github.com/epif4nov/template/internal/usecase/trip/finish"
@@ -30,13 +32,26 @@ type Container struct {
 
 func (c *Container) Close() { c.pool.Close() }
 
-func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Container, error) {
+func New(ctx context.Context, cfg config.Config, logger *slog.Logger, signals *telemetry.Providers) (*Container, error) {
+	pgTracer, err := telemetry.NewPostgres(signals.Traces, signals.Metrics)
+	if err != nil {
+		return nil, err
+	}
+	business, err := telemetry.NewBusiness(signals.Metrics, logger)
+	if err != nil {
+		return nil, err
+	}
+	mw, err := middleware.New(logger, signals.Traces, signals.Metrics)
+	if err != nil {
+		return nil, err
+	}
 	// Настраиваем пул соединений PostgreSQL.
 	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse database config: %w", err)
 	}
 
+	poolCfg.ConnConfig.Tracer = pgTracer
 	poolCfg.MaxConns = cfg.DatabaseMaxConns
 	poolCfg.MinConns = cfg.DatabaseMinConns
 	poolCfg.MaxConnLifetime = cfg.DatabaseMaxConnLifetime
@@ -66,16 +81,16 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger) (*Containe
 	tx := transaction.NewManager(pool, cfg.DatabaseQueryTimeout)
 	now := func() time.Time { return time.Now().UTC() }
 	handler := &handlers{
-		create: createhandler.New(create.New(repo, tx, now), cfg.DatabaseQueryTimeout, logger),
+		create: createhandler.New(telemetry.Create{Next: create.New(repo, tx, now), Signals: business}, cfg.DatabaseQueryTimeout, logger),
 		get:    gethandler.New(get.New(repo), cfg.DatabaseQueryTimeout, logger),
-		finish: finishhandler.New(finish.New(repo, tx, now), cfg.DatabaseQueryTimeout, logger),
+		finish: finishhandler.New(telemetry.Finish{Next: finish.New(repo, tx, now), Signals: business}, cfg.DatabaseQueryTimeout, logger),
 		pool:   pool, timeout: cfg.DatabaseQueryTimeout,
 	}
 	router := chi.NewRouter()
 	api.HandlerWithOptions(handler, api.ChiServerOptions{BaseRouter: router, ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
-		response.Problem(w, r, 400, "invalid_request", "Invalid request", err.Error())
+		response.Problem(w, 400, "invalid_request", "Invalid request", err.Error())
 	}})
-	return &Container{pool: pool, Handler: router}, nil
+	return &Container{pool: pool, Handler: mw.Wrap(router)}, nil
 }
 
 type handlers struct {

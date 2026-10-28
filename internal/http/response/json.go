@@ -97,8 +97,7 @@ func JSON(w http.ResponseWriter, status int, value any) {
 
 func Problem(
 	w http.ResponseWriter,
-	r *http.Request,
-	status int,
+	status int32,
 	code, title, detail string,
 ) {
 	problemType := "https://tripgo.example/problems/" +
@@ -107,12 +106,12 @@ func Problem(
 	problem := api.Problem{
 		Type:   problemType,
 		Title:  title,
-		Status: int32(status),
+		Status: status,
 		Code:   code,
 		Detail: &detail,
 	}
 
 	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(status)
+	w.WriteHeader(int(status))
 	_ = json.NewEncoder(w).Encode(problem)
 }

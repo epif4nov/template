@@ -46,7 +46,7 @@ func TestHandle(t *testing.T) {
 			})
 			h := handler.New(mock, time.Second, slog.New(slog.NewTextHandler(io.Discard, nil)))
 			r := httptest.NewRequest("POST", "/api/v1/trips", strings.NewReader(fmt.Sprintf(`{"user_id":%q,"driver_id":%q,"start_point":{"latitude":10,"longitude":20},"end_point":{"latitude":30,"longitude":40},"price":500}`, value.UserID(), value.DriverID())))
-			r.Header.Set("Content-Type", "application/json")
+			r.Header.Set("Content-Type", jsonContentType)
 			w := httptest.NewRecorder()
 			h.Handle(w, r, api.CreateTripParams{})
 			if w.Code != tc.status {
@@ -82,13 +82,16 @@ func TestHandle(t *testing.T) {
 func TestHandleInvalidBody(t *testing.T) {
 	valid := `{"user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c","driver_id":"8860b315-ec86-42eb-a17c-7c163d721ff5","start_point":{"latitude":0,"longitude":0},"end_point":{"latitude":0,"longitude":0},"price":0}`
 	for _, tc := range []struct{ name, body, contentType string }{
-		{"malformed", "{", "application/json"}, {"missing fields", "{}", "application/json"},
-		{"null", "null", "application/json"}, {"null price", strings.Replace(valid, `"price":0`, `"price":null`, 1), "application/json"},
-		{"missing coordinate", strings.Replace(valid, `"latitude":0,`, "", 1), "application/json"},
-		{"invalid UUID", strings.Replace(valid, "5cb72c04-7650-45c9-a79b-bcdba0631e0c", "bad", 1), "application/json"},
-		{"unknown field", strings.Replace(valid, `"price":0`, `"price":0,"unknown":1`, 1), "application/json"},
-		{"extra JSON", valid + " {}", "application/json"}, {"content type", valid, "text/plain"},
-		{"too large", strings.Repeat(" ", 1<<20) + valid, "application/json"},
+		{"malformed", "{", jsonContentType},
+		{"missing fields", "{}", jsonContentType},
+		{"null", "null", jsonContentType},
+		{"null price", strings.Replace(valid, `"price":0`, `"price":null`, 1), jsonContentType},
+		{"missing coordinate", strings.Replace(valid, `"latitude":0,`, "", 1), jsonContentType},
+		{"invalid UUID", strings.Replace(valid, "5cb72c04-7650-45c9-a79b-bcdba0631e0c", "bad", 1), jsonContentType},
+		{"unknown field", strings.Replace(valid, `"price":0`, `"price":0,"unknown":1`, 1), jsonContentType},
+		{"extra JSON", valid + " {}", jsonContentType},
+		{"content type", valid, "text/plain"},
+		{"too large", strings.Repeat(" ", 1<<20) + valid, jsonContentType},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mock := NewMockuseCase(gomock.NewController(t))
@@ -107,3 +110,5 @@ func TestHandleInvalidBody(t *testing.T) {
 		})
 	}
 }
+
+const jsonContentType = "application/json"

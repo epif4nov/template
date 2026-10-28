@@ -39,7 +39,6 @@ func (r *Repository) insertStatusHistory(
 		).
 		PlaceholderFormat(sq.Dollar).
 		ToSql()
-
 	if err != nil {
 		return fmt.Errorf("build status history query: %w", err)
 	}

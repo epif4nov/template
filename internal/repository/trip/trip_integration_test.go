@@ -88,7 +88,7 @@ func TestTripLifecycle(t *testing.T) {
 	if !errors.Is(err, repository.ErrTripNotFound) {
 		t.Fatalf("expected missing trip, got %v", err)
 	}
-	if created.Status != "active" {
+	if created.Status != activeStatus {
 		t.Fatalf("expected active, got %s", created.Status)
 	}
 
@@ -114,7 +114,6 @@ func TestTripLifecycle(t *testing.T) {
 		FROM trip_status_history
 		WHERE trip_id = $1
 	`, created.ID).Scan(&activeCount, &completedCount)
-
 	if err != nil {
 		t.Fatalf("query history: %v", err)
 	}
@@ -143,7 +142,7 @@ func TestRollbackWhenHistoryInsertFails(t *testing.T) {
 
 	trip := newTrip()
 	trip.ID = uuid.New()
-	trip.Status = "active"
+	trip.Status = activeStatus
 	trip.StartedAt = time.Now().UTC()
 
 	err := manager.Do(ctx, func(txCtx context.Context) error {
@@ -164,7 +163,6 @@ func TestRollbackWhenHistoryInsertFails(t *testing.T) {
 		"SELECT COUNT(*) FROM trips WHERE id = $1",
 		trip.ID,
 	).Scan(&count)
-
 	if err != nil {
 		t.Fatalf("check rollback: %v", err)
 	}

@@ -13,6 +13,9 @@ type Config struct {
 	HTTPReadHeaderTimeout time.Duration
 	HTTPWriteTimeout      time.Duration
 	HTTPIdleTimeout       time.Duration
+	OTLPEndpoint          string
+	OTLPProtocol          string
+	TracesSampler         string
 	LogLevel              string
 	ShutdownTimeout       time.Duration
 
@@ -86,6 +89,20 @@ func Load() (Config, error) {
 		return cfg, fmt.Errorf("invalid database pool settings")
 	}
 
+	if cfg.OTLPEndpoint, err = required("OTEL_EXPORTER_OTLP_ENDPOINT"); err != nil {
+		return cfg, err
+	}
+	if cfg.OTLPProtocol, err = required("OTEL_EXPORTER_OTLP_PROTOCOL"); err != nil {
+		return cfg, err
+	}
+	if cfg.TracesSampler, err = required("OTEL_TRACES_SAMPLER"); err != nil {
+		return cfg, err
+	}
+	switch cfg.TracesSampler {
+	case "always_on", "always_off", "traceidratio", "parentbased_always_on", "parentbased_always_off", "parentbased_traceidratio":
+	default:
+		return cfg, fmt.Errorf("unsupported OTEL_TRACES_SAMPLER: %s", cfg.TracesSampler)
+	}
 	return cfg, nil
 }
 

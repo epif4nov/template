@@ -20,9 +20,12 @@ func TestRestore(t *testing.T) {
 		finished *time.Time
 		invalid  bool
 	}{
-		{"active", id, StatusActive, nil, false}, {"completed", id, StatusCompleted, &end, false},
-		{"nil ID", uuid.Nil, StatusActive, nil, true}, {"unknown status", id, "invalid", nil, true},
-		{"active with finish", id, StatusActive, &end, true}, {"completed without finish", id, StatusCompleted, nil, true},
+		{"active", id, StatusActive, nil, false},
+		{"completed", id, StatusCompleted, &end, false},
+		{"nil ID", uuid.Nil, StatusActive, nil, true},
+		{"unknown status", id, "invalid", nil, true},
+		{"active with finish", id, StatusActive, &end, true},
+		{"completed without finish", id, StatusCompleted, nil, true},
 		{"finish before start", id, StatusCompleted, func() *time.Time { v := start.Add(-time.Minute); return &v }(), true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -62,7 +65,8 @@ func TestNewValidation(t *testing.T) {
 		price        int64
 		at           time.Time
 	}{
-		{name: "user", driver: id, at: at}, {name: "driver", user: id, at: at},
+		{name: "user", driver: id, at: at},
+		{name: "driver", user: id, at: at},
 		{name: "price", user: id, driver: id, price: -1, at: at},
 		{name: "latitude", user: id, driver: id, start: Coordinates{Latitude: 91}, at: at},
 		{name: "longitude", user: id, driver: id, end: Coordinates{Longitude: -181}, at: at},

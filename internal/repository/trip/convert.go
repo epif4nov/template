@@ -10,7 +10,6 @@ import (
 )
 
 func (r *Repository) Save(ctx context.Context, t *domain.Trip) error {
-
 	return r.CreateTrip(ctx, Trip{
 		ID:             t.ID(),
 		UserID:         t.UserID(),

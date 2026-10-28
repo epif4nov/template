@@ -109,7 +109,6 @@ func TestConcurrentCreateTrip(t *testing.T) {
 		FROM trips
 		WHERE driver_id = $1 AND status = 'active'
 	`, driverID).Scan(&activeCount)
-
 	if err != nil {
 		t.Fatalf("count active trips: %v", err)
 	}
@@ -205,7 +204,6 @@ func TestConcurrentFinishTrip(t *testing.T) {
 		  AND from_status = 'active'
 		  AND to_status = 'completed'
 	`, created.ID).Scan(&historyCount)
-
 	if err != nil {
 		t.Fatalf("count completion history: %v", err)
 	}

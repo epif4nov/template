@@ -37,7 +37,6 @@ func (r *Repository) GetTrip(
 		Where(sq.Eq{"id": id}).
 		PlaceholderFormat(sq.Dollar).
 		ToSql()
-
 	if err != nil {
 		return Trip{}, fmt.Errorf("build get trip query: %w", err)
 	}

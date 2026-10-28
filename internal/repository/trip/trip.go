@@ -80,7 +80,6 @@ func (r *Repository) CreateTrip(
 		).
 		PlaceholderFormat(sq.Dollar).
 		ToSql()
-
 	if err != nil {
 		return fmt.Errorf("build create trip query: %w", err)
 	}

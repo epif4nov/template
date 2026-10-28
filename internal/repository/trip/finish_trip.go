@@ -30,7 +30,6 @@ func (r *Repository) FinishTrip(
 		}).
 		PlaceholderFormat(sq.Dollar).
 		ToSql()
-
 	if err != nil {
 		return Trip{}, fmt.Errorf("build finish trip query: %w", err)
 	}
@@ -44,7 +43,6 @@ func (r *Repository) FinishTrip(
 
 	if result.RowsAffected() == 0 {
 		_, err := r.GetTrip(ctx, id)
-
 		if err != nil {
 			return Trip{}, err
 		}

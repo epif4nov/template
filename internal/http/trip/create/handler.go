@@ -26,7 +26,7 @@ func New(uc useCase, timeout time.Duration, logger *slog.Logger) *Handler {
 func (h *Handler) Handle(w http.ResponseWriter, r *http.Request, _ api.CreateTripParams) {
 	input, err := response.DecodeTripData(w, r)
 	if err != nil {
-		response.Problem(w, r, 400, "invalid_request", "Invalid request", err.Error())
+		response.Problem(w, 400, "invalid_request", "Invalid request", err.Error())
 		return
 	}
 	value := usecase.Input{UserID: input.UserId, DriverID: input.DriverId, StartPoint: trip.Coordinates{Latitude: input.StartPoint.Latitude, Longitude: input.StartPoint.Longitude}, EndPoint: trip.Coordinates{Latitude: input.EndPoint.Latitude, Longitude: input.EndPoint.Longitude}, Price: input.Price}

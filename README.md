@@ -1,6 +1,6 @@
 # TripGo — сервис поездок
 
-Учебный проект курса **«Разработка микросервисов на Go»**. В одном репозитории выполняются пять последовательных лабораторных работ. Текущая ветка — `homework/02`: архитектурный рефакторинг лабораторной работы № 2 на основе работающего API первой работы. Подключение OpenTelemetry и проверка Grafana/Jaeger запланированы следующим этапом.
+Учебный проект курса **«Разработка микросервисов на Go»**. В одном репозитории выполняются пять последовательных лабораторных работ. Текущая ветка — `homework/02`: архитектурный рефакторинг лабораторной работы № 2 на основе работающего API первой работы. Подключены OpenTelemetry, структурированные логи и метрики лабораторной № 2.
 
 ## Реализовано в лабораторной работе № 1
 
@@ -184,3 +184,68 @@ migrations/                         существующие миграции go
 - [Инфраструктура `tripgoctl`](https://github.com/course-go-autumn-2026/course-infra)
 
 При дальнейших лабораторных работа развивается в том же репозитории, без переписывания сервиса с нуля.
+
+## Observability (лабораторная № 2)
+
+Сервис отправляет трейсы и метрики по OTLP. Обязательны
+`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL` (`http/protobuf`
+или `grpc`) и `OTEL_TRACES_SAMPLER`; пример — `parentbased_always_on`.
+Для ratio-сэмплирования SDK также читает `OTEL_TRACES_SAMPLER_ARG`.
+Адреса берите из `tripgoctl connect` и локального окружения. `make run` сначала загружает значения из `.env.example`, затем локальные переопределения из `.env`: это сохраняет совместимость с окружением, в котором ещё нет HTTP-таймаутов.
+
+Ресурс: `service.name=trip-service`, `service.namespace=tripgo`,
+`deployment.environment=local`; `service.version` передаётся через
+`make build VERSION=...` / `make run VERSION=...` (по умолчанию Git describe,
+при прямом `go run` — `dev`).
+Экспорт асинхронный: недоступный Collector не блокирует бизнес-запросы.
+HTTP shutdown и завершение провайдеров используют общий дедлайн
+`SHUTDOWN_TIMEOUT`.
+
+[HTTP middleware](internal/http/middleware/middleware.go) выполняются в порядке
+Recover → Tracing → Logging → Metrics → chi.
+Предварительный Match в отдельном chi-контексте даёт шаблон для active requests
+до входа в обработчик; после маршрутизации Tracing читает окончательный
+RoutePattern. Неизвестные маршруты используют `unmatched`, нестандартные методы
+в метриках и именах спанов — `_OTHER`. Ответ буферизуется до выхода из цепочки:
+при панике даже частично сформированный JSON заменяется безопасным Problem 500.
+Это рассчитано на текущие JSON-ручки, без streaming.
+
+[Телеметрия](internal/infra/telemetry/) содержит SDK, JSON slog handler с
+trace_id/span_id (пустые вне спана), декораторы usecase и pgx tracer.
+Декораторы считают и логируют создание/завершение только после успешного возврата
+usecase, включая commit. Домен и usecase не импортируют OTel.
+otelpgx подключён к ConnConfig пула и работает также внутри транзакций.
+Его DB-гистограмма отключена: единая гистограмма на том же уровне tracer
+добавляет operation, collection и error.type. SQL-параметры и текст запросов
+в спаны не записываются; имена таблиц ограничены известной схемой.
+
+Реализованы пять обязательных метрик: `http.server.request.duration` и
+`db.client.operation.duration` в секундах, `http.server.active_requests`
+(UpDownCounter), `tripgo.trips.created` и `tripgo.trips.completed` (Counter).
+Дублирующие HTTP-метрики otelhttp отключены. Необязательная
+`tripgo.trips.active` пока отсутствует: корректный общий Gauge должен читать
+состояние PostgreSQL, а разность счётчиков процесса не учитывает перезапуски и
+другие экземпляры сервиса.
+
+Установка проверенной версии линтера в пользовательский каталог:
+
+```bash
+GOBIN="$HOME/.local/bin" go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
+make lint
+```
+
+Makefile добавляет этот каталог в PATH. Все обязательные линтеры и depguard
+сохранены. `make generate` обновляет также моки декораторов телеметрии.
+
+Unit-тесты проверяют шаблоны маршрутов, W3C-контекст, статусы/паники, метрики,
+корреляцию логов и HTTP при недоступном OTLP для обоих протоколов.
+`make test-integration` дополнительно проверяет связанные HTTP/DB-спаны
+реального создания поездки, включая BEGIN, оба INSERT и COMMIT.
+
+Для ручной проверки после `make run` создайте и завершите поездку:
+найдите trace_id из JSON-лога в Jaeger, проверьте вложенные запросы к обеим
+таблицам и шаблоны маршрутов. В Grafana/Prometheus найдите
+`http_server_request_duration_seconds`, `http_server_active_requests`,
+`db_client_operation_duration_seconds`, `tripgo_trips_created` и
+`tripgo_trips_completed` (экспортер может добавлять суффиксы единиц/`_total`).
+Снимки экрана для сдачи делаются с реальных интерфейсов Jaeger/Grafana.

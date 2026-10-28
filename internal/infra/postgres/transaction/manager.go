@@ -40,7 +40,6 @@ func (m *Manager) Do(
 	ctx context.Context,
 	fn func(ctx context.Context) error,
 ) (err error) {
-
 	// Если транзакция уже существует, повторно её не открываем
 	if _, ok := ctx.Value(txContextKey{}).(pgx.Tx); ok {
 		return fn(ctx)

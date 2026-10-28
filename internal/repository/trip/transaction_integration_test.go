@@ -24,7 +24,7 @@ func TestNestedTransactionRollback(t *testing.T) {
 
 	trip := newTrip()
 	trip.ID = uuid.New()
-	trip.Status = "active"
+	trip.Status = activeStatus
 	trip.StartedAt = time.Now().UTC()
 
 	t.Cleanup(func() {
@@ -65,7 +65,6 @@ func TestNestedTransactionRollback(t *testing.T) {
 		"SELECT COUNT(*) FROM trips WHERE id = $1",
 		trip.ID,
 	).Scan(&count)
-
 	if err != nil {
 		t.Fatalf("check rollback: %v", err)
 	}
@@ -85,7 +84,7 @@ func TestTransactionRollbackOnPanic(t *testing.T) {
 
 	trip := newTrip()
 	trip.ID = uuid.New()
-	trip.Status = "active"
+	trip.Status = activeStatus
 	trip.StartedAt = time.Now().UTC()
 
 	t.Cleanup(func() {
@@ -125,7 +124,6 @@ func TestTransactionRollbackOnPanic(t *testing.T) {
 		"SELECT COUNT(*) FROM trips WHERE id = $1",
 		trip.ID,
 	).Scan(&count)
-
 	if err != nil {
 		t.Fatalf("check rollback: %v", err)
 	}
@@ -134,3 +132,5 @@ func TestTransactionRollbackOnPanic(t *testing.T) {
 		t.Fatal("trip remained after panic")
 	}
 }
+
+const activeStatus = "active"
