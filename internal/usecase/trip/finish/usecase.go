@@ -22,7 +22,7 @@ func New(repo tripRepository, tx txManager, now func() time.Time) *UseCase {
 
 func (u *UseCase) Execute(ctx context.Context, id uuid.UUID) (*trip.Trip, error) {
 	if id == uuid.Nil {
-		return nil, trip.ErrInvalidTrip
+		return nil, &trip.ValidationError{Field: "trip_id", Reason: "must not be zero UUID"}
 	}
 	var result *trip.Trip
 	err := u.tx.Do(ctx, func(txCtx context.Context) error {

@@ -13,7 +13,10 @@ import (
 
 func Problem(err error) (int, api.Problem) {
 	status, code, title, detail := 500, "internal_error", "Internal Server Error", "Internal server error"
+	var validation *trip.ValidationError
 	switch {
+	case errors.As(err, &validation):
+		status, code, title, detail = 400, "invalid_request", "Invalid request", validation.Error()
 	case errors.Is(err, trip.ErrInvalidTrip):
 		status, code, title, detail = 400, "invalid_request", "Invalid request", "Invalid trip data"
 	case errors.Is(err, trip.ErrTripNotFound):

@@ -15,7 +15,7 @@ func New(repo tripRepository) *UseCase { return &UseCase{repo: repo} }
 
 func (u *UseCase) Execute(ctx context.Context, id uuid.UUID) (*trip.Trip, error) {
 	if id == uuid.Nil {
-		return nil, trip.ErrInvalidTrip
+		return nil, &trip.ValidationError{Field: "trip_id", Reason: "must not be zero UUID"}
 	}
 	value, err := u.repo.Fetch(ctx, id)
 	if err != nil {
