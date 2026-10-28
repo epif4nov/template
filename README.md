@@ -17,7 +17,7 @@
 - Go **1.27.1+** (проект проверялся с Go 1.27.3).
 - Docker Desktop с включённой интеграцией WSL 2 (при запуске в WSL).
 - Установленная утилита `tripgoctl` и доступный Docker daemon.
-- `make` и Bash; для ручных HTTP-проверок — `curl`.
+- `make` и Bash; для ручных HTTP-проверок — `curl`, для демонстрационного сценария — `jq`.
 
 Локальную инфраструктуру предоставляет [`tripgoctl`](https://github.com/course-go-autumn-2026/course-infra). Для второй работы окружение включает PostgreSQL и observability.
 
@@ -59,6 +59,10 @@ make run
 | `DATABASE_QUERY_TIMEOUT` | Таймаут операций с БД и транзакций |
 | `SHUTDOWN_TIMEOUT` | Время, отведённое на остановку сервера |
 | `LOG_LEVEL` | Уровень логирования |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | URL OTLP Collector из tripgoctl connect |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | http/protobuf или grpc |
+| `OTEL_TRACES_SAMPLER` | Политика сэмплирования, например parentbased_always_on |
+| `OTEL_TRACES_SAMPLER_ARG` | Доля для traceidratio/parentbased_traceidratio, читает SDK |
 
 Обязательные переменные проверяются при запуске. Реальные пароли и адреса из локального `.env` в Git не добавляются.
 
@@ -249,3 +253,89 @@ Unit-тесты проверяют шаблоны маршрутов, W3C-кон
 `db_client_operation_duration_seconds`, `tripgo_trips_created` и
 `tripgo_trips_completed` (экспортер может добавлять суффиксы единиц/`_total`).
 Снимки экрана для сдачи делаются с реальных интерфейсов Jaeger/Grafana.
+
+## Демонстрация и результаты финальной проверки HW02
+
+Протокол реального запуска, покрытие и ограничения: [docs/homework02-verification.md](docs/homework02-verification.md).
+Готовое описание будущего PR: [docs/homework02-pr.md](docs/homework02-pr.md).
+Короткая памятка по фактическому коду: [docs/homework02-defense.md](docs/homework02-defense.md).
+
+### Установка Go-зависимостей и инструменты демонстрации
+
+После установки Go, tripgoctl, Docker и make:
+
+```bash
+go mod download
+# В Ubuntu jq нужен только для воспроизводимого curl-сценария:
+sudo apt-get install jq
+# Инструменты генерации/goose закреплены в go.mod и вызываются через go tool.
+# golangci-lint устанавливается командой выше.
+```
+
+[Сценарий curl](docs/homework02-demo.sh) требует Bash, curl и jq, при каждом запуске
+выбирает новые UUID водителя/пользователя и оставляет созданную поездку завершённой:
+
+```bash
+tripgoctl environment start
+tripgoctl connect
+make migrate
+make run
+# В другом терминале:
+bash docs/homework02-demo.sh
+# Для другого HTTP-адреса:
+BASE_URL=http://localhost:8080 bash docs/homework02-demo.sh
+```
+
+Проверяются 200 /health и /ready, 201 + Location создания, 200 получения/finish,
+409 driver_busy/trip_completed, 404 отсутствующей поездки, 400 неверных
+JSON/UUID/цены/координат. Доменная ValidationError несёт Field/Reason и сохраняет
+errors.Is(ErrInvalidTrip); единый mapper отдаёт безопасную причину в Problem.detail.
+
+### Jaeger и Grafana
+
+1. В stdout сервиса найдите запись request handled со status=201 и её trace_id.
+2. Откройте Jaeger по URL из connect, выберите trip-service или вставьте trace_id
+   в Lookup by Trace ID. В создании должны быть BEGIN, INSERT для trips,
+   INSERT для trip_status_history и COMMIT. При первом выполнении SQL также видны
+   вложенные prepare-спаны.
+3. Откройте Grafana → Explore → источник Prometheus → Code. Запускайте следующие
+   выражения отдельными запросами A–E (они также работают в Prometheus):
+
+```promql
+http_server_request_duration_seconds_count
+http_server_active_requests
+db_client_operation_duration_seconds_count
+tripgo_trips_created_total
+tripgo_trips_completed_total
+```
+
+Для p95 HTTP по маршрутам:
+
+```promql
+histogram_quantile(0.95, sum by (le, http_route) (rate(http_server_request_duration_seconds_bucket[5m])))
+```
+
+Метрики экспортируются периодически: по умолчанию SDK раз в 60 секунд,
+Prometheus делает scrape раз в 5 секунд. После первого curl дождитесь экспорта,
+затем обновите Explore. После одного сценария в новом процессе created=1,
+completed=1; ошибочные повторения счётчики не увеличивают. Active requests после
+ответов возвращается к 0. У HTTP-меток должны быть шаблоны с {tripId}, UUID в
+labels недопустимы. Счётчики процесса сбрасываются после его перезапуска.
+
+Дополнительные OTel-параметры читаются SDK напрямую: OTEL_METRIC_EXPORT_INTERVAL
+(миллисекунды), OTEL_EXPORTER_OTLP_TIMEOUT, OTEL_BSP_SCHEDULE_DELAY и
+OTEL_BSP_EXPORT_TIMEOUT. Для обычного запуска достаточно параметров из
+[.env.example](.env.example) и локального файла окружения; при проверке использовались
+стандартные интервалы.
+
+Реальные снимки: [Jaeger](docs/screenshots/jaeger-create-trip.png),
+[бизнес-метрики Grafana](docs/screenshots/grafana-business-metrics.png),
+[HTTP/DB/active requests в Grafana](docs/screenshots/grafana-http-db-metrics.png).
+Это данные настоящих запросов, не имитации.
+
+В финальном прогоне: генерация, lint (0 issues), unit/integration с -race -count=2,
+go build и diff --check прошли. Покрытие domain/trip — 97,8%, каждого usecase —
+100%. API работал при реально остановленном Collector; PostgreSQL оставался
+доступен. Штатный SIGTERM завершил бинарник с кодом 0, закрыл HTTP и снизил
+число его PostgreSQL-сессий с 3 до 0; экспорт при shutdown завершился без ошибок.
+Результат относится к прогону 28.10.2026; повторить команды перед своей сдачей.
