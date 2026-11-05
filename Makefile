@@ -15,7 +15,7 @@ migrate-status:
 	go tool goose -dir migrations postgres "$$DATABASE_URL" status
 
 run:
-	@set -a; source .env; set +a; \
+	@set -a; source .env.example; source .env; set +a; \
 	go run ./cmd/trip-service
 
 generate:
