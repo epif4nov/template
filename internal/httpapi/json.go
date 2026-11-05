@@ -53,6 +53,16 @@ func validateRequiredFields(body []byte) error {
 	if fields == nil {
 		return errors.New("request body must be an object")
 	}
+	if err := rejectUnknownFields(
+		fields,
+		"user_id",
+		"driver_id",
+		"start_point",
+		"end_point",
+		"price",
+	); err != nil {
+		return err
+	}
 
 	for _, name := range []string{
 		"user_id", "driver_id", "start_point", "end_point", "price",
@@ -69,6 +79,14 @@ func validateRequiredFields(body []byte) error {
 		}
 		if coordinates == nil {
 			return fmt.Errorf("%s must be an object", name)
+		}
+
+		if err := rejectUnknownFields(
+			coordinates,
+			"latitude",
+			"longitude",
+		); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
 		}
 
 		for _, coordinate := range []string{"latitude", "longitude"} {
@@ -115,4 +133,23 @@ func writeProblem(
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(problem)
+}
+
+func rejectUnknownFields(
+	fields map[string]json.RawMessage,
+	allowed ...string,
+) error {
+	known := make(map[string]struct{}, len(allowed))
+
+	for _, name := range allowed {
+		known[name] = struct{}{}
+	}
+
+	for name := range fields {
+		if _, ok := known[name]; !ok {
+			return fmt.Errorf("unknown JSON field %q", name)
+		}
+	}
+
+	return nil
 }
