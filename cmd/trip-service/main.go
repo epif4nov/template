@@ -61,7 +61,6 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create database pool: %w", err)
 	}
-	defer pool.Close()
 
 	// Проверяем доступность базы при запуске.
 	pingCtx, cancelPing := context.WithTimeout(
@@ -72,6 +71,7 @@ func run() error {
 	cancelPing()
 
 	if err != nil {
+		pool.Close()
 		return fmt.Errorf("database ping: %w", err)
 	}
 
@@ -130,11 +130,14 @@ func run() error {
 		}
 	}()
 
+	var serveErr error
+
 	select {
 	case <-signalCtx.Done():
 		logger.Info("shutdown signal received")
 	case err := <-serverErrors:
-		return fmt.Errorf("HTTP server: %w", err)
+		serveErr := fmt.Errorf("HTTP server: %w", err)
+		logger.Error("HTTP server stopped unexpectedly", "error", serveErr)
 	}
 
 	// 7. Graceful shutdown.
@@ -144,11 +147,43 @@ func run() error {
 	)
 	defer cancelShutdown()
 
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		_ = server.Close()
-		return fmt.Errorf("server shutdown: %w", err)
+	shutdownDone := make(chan error, 1)
+
+	go func() {
+		// Сначала останавливаем HTTP-сервер.
+		err := server.Shutdown(shutdownCtx)
+
+		if err != nil {
+			// Принудительно закрываем HTTP-соединения,
+			// если graceful shutdown не удался.
+			err = errors.Join(err, server.Close())
+		}
+
+		// Затем закрываем пул PostgreSQL.
+		pool.Close()
+
+		shutdownDone <- err
+	}()
+
+	select {
+	case err := <-shutdownDone:
+		// Все ресурсы закрыты.
+		if err != nil {
+			return fmt.Errorf("server shutdown: %w", err)
+		}
+
+		logger.Info("HTTP server and database pool stopped")
+
+	case <-shutdownCtx.Done():
+		// Общий бюджет истёк.
+		logger.Error(
+			"shutdown timeout exceeded",
+			"timeout", cfg.ShutdownTimeout,
+		)
+
+		// Не даём pool.Close() задержать завершение.
+		os.Exit(1)
 	}
 
-	logger.Info("HTTP server stopped")
-	return nil
+	return serveErr
 }
