@@ -2,9 +2,12 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -66,6 +69,25 @@ func (h *Handler) CreateTrip(
 	_ api.CreateTripParams,
 ) {
 	input, err := decodeTripData(w, r)
+
+	keyValues, hasKey := r.Header[http.CanonicalHeaderKey("Idempotency-Key")]
+
+	if hasKey {
+		if len(keyValues) != 1 ||
+			len(keyValues[0]) == 0 ||
+			len(keyValues[0]) > 255 ||
+			strings.TrimSpace(keyValues[0]) != keyValues[0] {
+			writeProblem(
+				w, r,
+				http.StatusBadRequest,
+				"invalid_request",
+				"Invalid request",
+				"Invalid Idempotency-Key header",
+			)
+			return
+		}
+	}
+
 	if err != nil {
 		writeProblem(w, r, http.StatusBadRequest,
 			"invalid_request", "Invalid request", err.Error())
@@ -85,7 +107,39 @@ func (h *Handler) CreateTrip(
 	ctx, cancel := context.WithTimeout(r.Context(), h.queryTimeout)
 	defer cancel()
 
-	created, err := h.service.CreateTrip(ctx, trip)
+	var created repository.Trip
+
+	if hasKey {
+		// Канонизируем содержимое через структуру
+		// OpenAPI: порядок JSON-полей не влияет на хеш.
+		body, marshalErr := json.Marshal(input)
+		if marshalErr != nil {
+			h.logger.Error(
+				"marshal idempotency request",
+				"error", marshalErr,
+			)
+			writeProblem(
+				w, r,
+				http.StatusInternalServerError,
+				"internal_error",
+				"Internal Server Error",
+				"Internal server error",
+			)
+			return
+		}
+
+		hash := sha256.Sum256(body)
+
+		created, err = h.service.CreateTripIdempotent(
+			ctx,
+			trip,
+			keyValues[0],
+			hash,
+		)
+	} else {
+		created, err = h.service.CreateTrip(ctx, trip)
+	}
+
 	if err != nil {
 		h.handleError(w, r, err)
 		return
@@ -151,6 +205,15 @@ func (h *Handler) handleError(
 	case errors.Is(err, repository.ErrTripNotFound):
 		writeProblem(w, r, http.StatusNotFound,
 			"trip_not_found", "Trip not found", "Trip was not found")
+
+	case errors.Is(err, repository.ErrIdempotencyConflict):
+		writeProblem(
+			w, r,
+			http.StatusConflict,
+			"idempotency_conflict",
+			"Idempotency conflict",
+			"Idempotency-Key was already used with a different request",
+		)
 
 	case errors.Is(err, repository.ErrDriverBusy):
 		writeProblem(w, r, http.StatusConflict,
