@@ -26,11 +26,18 @@ import (
 )
 
 type Container struct {
-	pool    *pgxpool.Pool
-	Handler http.Handler
+	pool     *pgxpool.Pool
+	business *telemetry.Business
+	Handler  http.Handler
 }
 
-func (c *Container) Close() { c.pool.Close() }
+func (c *Container) Close() {
+	if c.business != nil {
+		c.business.UnregisterActiveTrips()
+	}
+
+	c.pool.Close()
+}
 
 func New(ctx context.Context, cfg config.Config, logger *slog.Logger, signals *telemetry.Providers) (*Container, error) {
 	pgTracer, err := telemetry.NewPostgres(signals.Traces, signals.Metrics)
@@ -77,6 +84,33 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger, signals *t
 
 	logger.Info("database connected")
 
+	if err := business.RegisterActiveTrips(
+		signals.Metrics,
+		func(ctx context.Context) (int64, error) {
+			queryCtx, cancel := context.WithTimeout(
+				ctx,
+				cfg.DatabaseQueryTimeout,
+			)
+			defer cancel()
+
+			var count int64
+
+			err := pool.QueryRow(
+				queryCtx,
+				`SELECT COUNT(*)
+				FROM trips
+				WHERE status = 'active'`,
+			).Scan(&count)
+
+			return count, err
+		},
+	); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf(
+			"register active trips metric: %w", err,
+		)
+	}
+
 	repo := repository.New(pool)
 	tx := transaction.NewManager(pool, cfg.DatabaseQueryTimeout)
 	now := func() time.Time { return time.Now().UTC() }
@@ -90,7 +124,11 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger, signals *t
 	api.HandlerWithOptions(handler, api.ChiServerOptions{BaseRouter: router, ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 		response.Problem(w, 400, "invalid_request", "Invalid request", err.Error())
 	}})
-	return &Container{pool: pool, Handler: mw.Wrap(router)}, nil
+	return &Container{
+		pool:     pool,
+		business: business,
+		Handler:  mw.Wrap(router),
+	}, nil
 }
 
 type handlers struct {
