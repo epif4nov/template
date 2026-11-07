@@ -72,6 +72,47 @@ make run
 | `GET` | `/api/v1/trips/{tripId}` | `200` — данные поездки |
 | `POST` | `/api/v1/trips/{tripId}/finish` | `200` — поездка завершена |
 
+
+### Идемпотентность создания поездки
+
+Для `POST /api/v1/trips` поддерживается необязательный
+заголовок `Idempotency-Key` в формате UUID.
+
+Пример:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/trips \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: 35de60ac-2a26-43d1-b513-3fe4bc5dc705' \
+  -d '{
+    "user_id":"5cb72c04-7650-45c9-a79b-bcdba0631e0c",
+    "driver_id":"8860b315-ec86-42eb-a17c-7c163d721ff5",
+    "start_point":{"latitude":59.9398,"longitude":30.3146},
+    "end_point":{"latitude":59.9290,"longitude":30.3626},
+    "price":1450
+  }'
+```
+
+Поведение:
+
+- Первый запрос создаёт поездку и возвращает `201 Created`.
+- Повтор с тем же ключом и данными возвращает
+  первоначальный результат с тем же UUID и `Location`.
+- Повтор с тем же ключом, но другими данными
+  возвращает `409 idempotency_conflict`.
+- Конкурентные запросы с одинаковым ключом
+  не создают дополнительные поездки.
+- Повтор после завершения поездки также возвращает
+  первоначальный ответ, не изменяя её состояние.
+
+Ключ и результат сохраняются в PostgreSQL атомарно
+с созданием поездки и записью истории статусов.
+Для этого используется миграция
+`00003_create_idempotency_keys.sql`.
+
+Без заголовка `Idempotency-Key` создание поездки
+работает в обычном режиме.
+
 Пример создания поездки:
 
 ```bash
@@ -145,6 +186,8 @@ migrations/             миграции goose
 Dockerfile              многостадийная сборка Go-сервиса
 .dockerignore           исключения для контекста Docker
 compose.yaml            запуск приложения и PostgreSQL
+internal/repository/idempotency.go   сохранение ключей и результатов
+internal/service/trip_idempotency.go идемпотентное создание поездок
 ```
 
 ## Сдача работы и материалы курса
