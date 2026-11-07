@@ -142,6 +142,9 @@ internal/service/       бизнес-операции с поездками
 internal/transaction/   менеджер транзакций и выбор исполнителя
 contracts/openapi/      OpenAPI-контракт
 migrations/             миграции goose
+Dockerfile              многостадийная сборка Go-сервиса
+.dockerignore           исключения для контекста Docker
+compose.yaml            запуск приложения и PostgreSQL
 ```
 
 ## Сдача работы и материалы курса
@@ -154,4 +157,64 @@ migrations/             миграции goose
 - [Оценивание и порядок сдачи](https://github.com/course-go-autumn-2026/course/blob/main/homework/docs/grading.md)
 - [Инфраструктура `tripgoctl`](https://github.com/course-go-autumn-2026/course-infra)
 
-При дальнейших лабораторных работа развивается в том же репозитории, без переписывания сервиса с нуля.
+
+## Запуск через Docker Compose
+
+Для запуска необходимы Docker и Docker Compose.
+
+### Запуск PostgreSQL и приложения
+
+```bash
+docker compose up -d --build
+```
+
+PostgreSQL доступен на `127.0.0.1:15432`.
+HTTP-сервис доступен на `127.0.0.1:8080`.
+
+### Применение миграций
+
+После первого запуска необходимо применить миграции.
+Для команды ниже нужен установленный Go:
+
+```bash
+go tool goose -dir migrations postgres \
+  'postgres://tripgo:tripgo@127.0.0.1:15432/tripgo?sslmode=disable' up
+```
+
+Команда создаёт таблицы `trips`,
+`trip_status_history` и `goose_db_version`.
+
+### Проверка работоспособности
+
+```bash
+curl -i http://127.0.0.1:8080/health
+curl -i http://127.0.0.1:8080/ready
+docker compose ps
+```
+
+При доступности сервиса и PostgreSQL оба
+HTTP-эндпоинта возвращают 200 OK.
+
+### Проверка логов
+
+```bash
+docker compose logs app --tail=30
+```
+
+### Остановка
+
+```bash
+docker compose down
+```
+
+Именованный том PostgreSQL сохраняется.
+
+### Размер образа
+
+Многостадийная сборка использует Go Alpine
+для компиляции и distroless для запуска.
+
+Размер собранного образа приложения:
+21,9 МБ (локальное измерение).
+Приложение работает от непривилегированного
+пользователя.
