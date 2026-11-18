@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/epif4nov/template/internal/infra/telemetry"
 )
 
 // Интерфейс отправки запроса на получение координаты.
@@ -29,6 +32,8 @@ type Pool struct {
 
 	startOnce sync.Once
 	wg        sync.WaitGroup
+	done      chan struct{}
+	signals   *telemetry.Positions
 }
 
 func NewPool(
@@ -60,8 +65,11 @@ func NewPool(
 		logger:         logger,
 		workers:        workers,
 		requestTimeout: requestTimeout,
+		done:           make(chan struct{}),
 	}, nil
 }
+
+func (p *Pool) SetSignals(signals *telemetry.Positions) { p.signals = signals }
 
 // Start запускает фиксированное количество воркеров.
 func (p *Pool) Start(ctx context.Context) {
@@ -71,6 +79,7 @@ func (p *Pool) Start(ctx context.Context) {
 
 			go p.runWorker(ctx, i+1)
 		}
+		go func() { p.wg.Wait(); close(p.done) }()
 	})
 }
 
@@ -104,7 +113,18 @@ func (p *Pool) process(
 
 	// Проверяем отмену сервиса и актуальность задачи.
 	if ctx.Err() != nil || !p.queue.IsCurrent(task) {
+		if p.signals != nil {
+			p.signals.RequestDropped(ctx)
+		}
 		return
+	}
+
+	if p.signals != nil {
+		var span trace.Span
+		ctx, span = p.signals.StartTask(ctx, task.Link)
+		defer span.End()
+		p.signals.WorkerActive(ctx, 1)
+		defer p.signals.WorkerActive(ctx, -1)
 	}
 
 	// Ограничиваем время одного обращения к Push Service.
@@ -113,12 +133,30 @@ func (p *Pool) process(
 		p.requestTimeout,
 	)
 	defer cancel()
+	if !p.queue.Register(task, cancel) {
+		if p.signals != nil {
+			p.signals.RequestDropped(ctx)
+		}
+		return
+	}
 
+	start := time.Now()
+	var pushSpan trace.Span
+	if p.signals != nil {
+		requestCtx, pushSpan = p.signals.StartPush(requestCtx)
+	}
 	err := p.sender.RequestPosition(
 		requestCtx,
 		task.Trip.DriverID,
 		task.Trip.ID,
 	)
+
+	if pushSpan != nil {
+		pushSpan.End()
+	}
+	if p.signals != nil {
+		p.signals.RequestResult(ctx, err, time.Since(start))
+	}
 
 	if err != nil {
 		p.logger.Warn(
@@ -140,5 +178,14 @@ func (p *Pool) process(
 // Wait ожидает завершения всех запущенных воркеров.
 // Перед вызовом нужно остановить сканер и закрыть очередь.
 func (p *Pool) Wait() {
-	p.wg.Wait()
+	<-p.done
+}
+
+func (p *Pool) WaitContext(ctx context.Context) error {
+	select {
+	case <-p.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }

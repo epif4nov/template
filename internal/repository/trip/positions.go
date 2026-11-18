@@ -57,7 +57,6 @@ func (r *Repository) InsertPosition(
 		 RETURNING id`,
 		tripID, latitude, longitude, recordedAt,
 	).Scan(&id)
-
 	if err != nil {
 		return 0, fmt.Errorf("insert position: %w", err)
 	}
@@ -80,7 +79,6 @@ func (r *Repository) UpdateLastPositionAt(
 		 WHERE id = $1`,
 		tripID, recordedAt,
 	)
-
 	if err != nil {
 		return fmt.Errorf("update last position: %w", err)
 	}

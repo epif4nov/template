@@ -25,6 +25,13 @@ type Config struct {
 	DatabaseMaxConnLifetime time.Duration
 	DatabaseConnectTimeout  time.Duration
 	DatabaseQueryTimeout    time.Duration
+	PositionCheckInterval   time.Duration
+
+	PositionStaleAfter time.Duration
+	PositionWorkers    int
+	PositionQueueSize  int
+	PushHTTPURL        string
+	PushRequestTimeout time.Duration
 }
 
 func Load() (Config, error) {
@@ -103,6 +110,26 @@ func Load() (Config, error) {
 	default:
 		return cfg, fmt.Errorf("unsupported OTEL_TRACES_SAMPLER: %s", cfg.TracesSampler)
 	}
+
+	if cfg.PositionCheckInterval, err = duration("POSITION_CHECK_INTERVAL"); err != nil {
+		return cfg, err
+	}
+	if cfg.PositionStaleAfter, err = duration("POSITION_STALE_AFTER"); err != nil {
+		return cfg, err
+	}
+	if cfg.PositionWorkers, err = positiveInt("POSITION_WORKERS"); err != nil {
+		return cfg, err
+	}
+	if cfg.PositionQueueSize, err = positiveInt("POSITION_QUEUE_SIZE"); err != nil {
+		return cfg, err
+	}
+	if cfg.PushHTTPURL, err = required("PUSH_HTTP_URL"); err != nil {
+		return cfg, err
+	}
+	if cfg.PushRequestTimeout, err = duration("PUSH_REQUEST_TIMEOUT"); err != nil {
+		return cfg, err
+	}
+
 	return cfg, nil
 }
 
@@ -140,4 +167,15 @@ func integer(key string) (int32, error) {
 	}
 
 	return int32(result), nil
+}
+
+func positiveInt(key string) (int, error) {
+	value, err := integer(key)
+	if err != nil {
+		return 0, err
+	}
+	if value <= 0 {
+		return 0, fmt.Errorf("%s must be positive", key)
+	}
+	return int(value), nil
 }

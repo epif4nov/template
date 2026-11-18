@@ -30,7 +30,7 @@ func restore(t Trip) (*domain.Trip, error) {
 		t.ID, t.UserID, t.DriverID,
 		domain.Coordinates{Latitude: t.StartLatitude, Longitude: t.StartLongitude},
 		domain.Coordinates{Latitude: t.EndLatitude, Longitude: t.EndLongitude},
-		t.Price, domain.Status(t.Status), t.StartedAt, t.FinishedAt,
+		t.Price, domain.Status(t.Status), t.StartedAt, t.FinishedAt, t.LastPositionAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("restore trip: %w", err)

@@ -26,9 +26,10 @@ type Trip struct {
 
 	price int64
 
-	status     Status
-	startedAt  time.Time
-	finishedAt *time.Time
+	status         Status
+	startedAt      time.Time
+	finishedAt     *time.Time
+	lastPositionAt *time.Time
 }
 
 func New(
@@ -84,6 +85,14 @@ func (t *Trip) Status() Status {
 	return t.status
 }
 
+func (t *Trip) LastPositionAt() *time.Time {
+	if t.lastPositionAt == nil {
+		return nil
+	}
+	value := *t.lastPositionAt
+	return &value
+}
+
 func (t *Trip) FinishedAt() *time.Time {
 	if t.finishedAt == nil {
 		return nil
@@ -105,7 +114,7 @@ func (t *Trip) ID() uuid.UUID {
 }
 
 // Restore validates persisted state without generating a new identity.
-func Restore(id, userID, driverID uuid.UUID, start, end Coordinates, price int64, status Status, startedAt time.Time, finishedAt *time.Time) (*Trip, error) {
+func Restore(id, userID, driverID uuid.UUID, start, end Coordinates, price int64, status Status, startedAt time.Time, finishedAt *time.Time, lastPositionAt ...*time.Time) (*Trip, error) {
 	if id == uuid.Nil {
 		return nil, &ValidationError{Field: "id", Reason: zeroUUIDReason}
 	}
@@ -128,6 +137,10 @@ func Restore(id, userID, driverID uuid.UUID, start, end Coordinates, price int64
 		}
 	default:
 		return nil, &ValidationError{Field: "status", Reason: "must be active or completed"}
+	}
+	if len(lastPositionAt) > 0 && lastPositionAt[0] != nil {
+		at := *lastPositionAt[0]
+		value.lastPositionAt = &at
 	}
 	return value, nil
 }

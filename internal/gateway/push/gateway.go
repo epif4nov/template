@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 type Gateway struct {
@@ -77,7 +78,7 @@ func New(baseURL string, timeout time.Duration) (*Gateway, error) {
 		}).DialContext,
 		TLSHandshakeTimeout:   timeout,
 		ResponseHeaderTimeout: timeout,
-		IdleConnTimeout:       90 * time.Second,
+		IdleConnTimeout:       timeout,
 	}
 
 	return &Gateway{
@@ -121,6 +122,7 @@ func (g *Gateway) RequestPosition(
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	propagation.TraceContext{}.Inject(ctx, propagation.HeaderCarrier(req.Header))
 
 	resp, err := g.client.Do(req)
 	if err != nil {

@@ -71,6 +71,8 @@ func run() error {
 		IdleTimeout:       cfg.HTTPIdleTimeout,
 	}
 
+	app.Start(context.Background())
+	logger.Info("service started")
 	// Обрабатываем сигналы остановки.
 	signalCtx, stop := signal.NotifyContext(
 		context.Background(),
@@ -89,23 +91,44 @@ func run() error {
 		}
 	}()
 
+	var serveErr error
+
 	select {
 	case <-signalCtx.Done():
 		logger.Info("shutdown signal received")
-	case err := <-serverErrors:
-		return fmt.Errorf("HTTP server: %w", err)
+	case serveErr = <-serverErrors:
+		logger.Error("HTTP server failed", "error", serveErr)
 	}
 
-	// Graceful shutdown.
+	// Один дедлайн для всех компонентов.
 	shutdownDeadline = time.Now().Add(cfg.ShutdownTimeout)
-	shutdownCtx, cancelShutdown := context.WithDeadline(context.Background(), shutdownDeadline)
 
+	shutdownCtx, cancelShutdown := context.WithDeadline(
+		context.Background(),
+		shutdownDeadline,
+	)
 	defer cancelShutdown()
+
+	// Сначала прекращаем принимать HTTP-запросы.
+	var shutdownErr error
+
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		_ = server.Close()
-		return fmt.Errorf("server shutdown: %w", err)
+		shutdownErr = fmt.Errorf("HTTP shutdown: %w", err)
 	}
 
-	logger.Info("HTTP server stopped")
-	return nil
+	// Затем останавливаем сканер, очередь и воркеров.
+	if err := app.Shutdown(shutdownCtx); err != nil {
+		shutdownErr = errors.Join(
+			shutdownErr,
+			fmt.Errorf("position workers shutdown: %w", err),
+		)
+	}
+
+	if serveErr != nil {
+		shutdownErr = errors.Join(shutdownErr, serveErr)
+	}
+
+	logger.Info("service shutdown completed")
+	return shutdownErr
 }

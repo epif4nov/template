@@ -27,9 +27,10 @@ type Position struct {
 }
 
 type UseCase struct {
-	repo positionRepository
-	tx   txManager
-	now  func() time.Time
+	repo    positionRepository
+	tx      txManager
+	now     func() time.Time
+	onSaved func(context.Context, uuid.UUID)
 }
 
 func New(
@@ -38,6 +39,11 @@ func New(
 	now func() time.Time,
 ) *UseCase {
 	return &UseCase{repo: repo, tx: tx, now: now}
+}
+
+// SetOnSaved installs a callback invoked only after a successful commit.
+func (u *UseCase) SetOnSaved(fn func(context.Context, uuid.UUID)) {
+	u.onSaved = fn
 }
 
 func (u *UseCase) Execute(
@@ -107,6 +113,10 @@ func (u *UseCase) Execute(
 	})
 	if err != nil {
 		return nil, fmt.Errorf("save position: %w", err)
+	}
+
+	if u.onSaved != nil {
+		u.onSaved(ctx, input.TripID)
 	}
 
 	return &Position{

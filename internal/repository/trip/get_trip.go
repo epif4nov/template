@@ -32,6 +32,7 @@ func (r *Repository) GetTrip(
 			"status",
 			"started_at",
 			"finished_at",
+			"last_position_at",
 		).
 		From("trips").
 		Where(sq.Eq{"id": id}).
@@ -57,6 +58,7 @@ func (r *Repository) GetTrip(
 		&trip.Status,
 		&trip.StartedAt,
 		&trip.FinishedAt,
+		&trip.LastPositionAt,
 	)
 
 	if errors.Is(err, pgx.ErrNoRows) {

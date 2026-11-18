@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/epif4nov/template/internal/config"
+	pushgateway "github.com/epif4nov/template/internal/gateway/push"
 	api "github.com/epif4nov/template/internal/generated"
 	"github.com/epif4nov/template/internal/http/middleware"
 	"github.com/epif4nov/template/internal/http/response"
@@ -27,12 +29,15 @@ import (
 	"github.com/epif4nov/template/internal/usecase/trip/get"
 	listposition "github.com/epif4nov/template/internal/usecase/trip/positions/list"
 	saveposition "github.com/epif4nov/template/internal/usecase/trip/positions/save"
+	workerpositions "github.com/epif4nov/template/internal/worker/positions"
 )
 
 type Container struct {
-	pool     *pgxpool.Pool
-	business *telemetry.Business
-	Handler  http.Handler
+	pool            *pgxpool.Pool
+	business        *telemetry.Business
+	Handler         http.Handler
+	positionService *workerpositions.Service
+	pushGateway     *pushgateway.Gateway
 }
 
 func (c *Container) Close() {
@@ -40,6 +45,9 @@ func (c *Container) Close() {
 		c.business.UnregisterActiveTrips()
 	}
 
+	if c.pushGateway != nil {
+		c.pushGateway.Close()
+	}
 	c.pool.Close()
 }
 
@@ -118,13 +126,83 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger, signals *t
 	repo := repository.New(pool)
 	tx := transaction.NewManager(pool, cfg.DatabaseQueryTimeout)
 	now := func() time.Time { return time.Now().UTC() }
+
+	positionQueue, err := workerpositions.NewQueue(
+		cfg.PositionQueueSize,
+	)
+	if err != nil {
+		business.UnregisterActiveTrips()
+		pool.Close()
+		return nil, fmt.Errorf("create position queue: %w", err)
+	}
+
+	pushGateway, err := pushgateway.New(
+		cfg.PushHTTPURL,
+		cfg.PushRequestTimeout,
+	)
+	if err != nil {
+		business.UnregisterActiveTrips()
+		pool.Close()
+		return nil, fmt.Errorf("create push gateway: %w", err)
+	}
+
+	workerPool, err := workerpositions.NewPool(
+		positionQueue,
+		pushGateway,
+		logger,
+		cfg.PositionWorkers,
+		cfg.PushRequestTimeout,
+	)
+	if err != nil {
+		pushGateway.Close()
+		business.UnregisterActiveTrips()
+		pool.Close()
+		return nil, fmt.Errorf("create worker pool: %w", err)
+	}
+
+	scanner, err := workerpositions.NewScanner(
+		repo,
+		positionQueue,
+		logger,
+		cfg.PositionCheckInterval,
+		cfg.PositionStaleAfter,
+	)
+	if err != nil {
+		pushGateway.Close()
+		business.UnregisterActiveTrips()
+		pool.Close()
+		return nil, fmt.Errorf("create scanner: %w", err)
+	}
+
+	positionSignals, err := telemetry.NewPositions(signals.Metrics, signals.Traces, positionQueue.Len)
+	if err != nil {
+		pushGateway.Close()
+		business.UnregisterActiveTrips()
+		pool.Close()
+		return nil, fmt.Errorf("create position telemetry: %w", err)
+	}
+	workerPool.SetSignals(positionSignals)
+	scanner.SetSignals(positionSignals)
+
+	positionService := workerpositions.NewService(
+		scanner,
+		positionQueue,
+		workerPool,
+	)
+
+	savePositionUseCase := saveposition.New(repo, tx, now)
+	savePositionUseCase.SetOnSaved(func(ctx context.Context, id uuid.UUID) {
+		positionQueue.Cancel(id)
+		positionSignals.Saved(ctx)
+	})
+
 	handler := &handlers{
 		create: createhandler.New(telemetry.Create{Next: create.New(repo, tx, now), Signals: business}, cfg.DatabaseQueryTimeout, logger),
 		get:    gethandler.New(get.New(repo), cfg.DatabaseQueryTimeout, logger),
 		finish: finishhandler.New(telemetry.Finish{Next: finish.New(repo, tx, now), Signals: business}, cfg.DatabaseQueryTimeout, logger),
 		pool:   pool, timeout: cfg.DatabaseQueryTimeout,
 		savePosition: savepositionhandler.New(
-			saveposition.New(repo, tx, now),
+			savePositionUseCase,
 			cfg.DatabaseQueryTimeout,
 			logger,
 		),
@@ -140,9 +218,11 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger, signals *t
 		response.Problem(w, 400, "invalid_request", "Invalid request", err.Error())
 	}})
 	return &Container{
-		pool:     pool,
-		business: business,
-		Handler:  mw.Wrap(router),
+		pool:            pool,
+		business:        business,
+		Handler:         mw.Wrap(router),
+		positionService: positionService,
+		pushGateway:     pushGateway,
 	}, nil
 }
 
@@ -197,4 +277,12 @@ func (h *handlers) Ready(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, 200, api.HealthResponse{Status: api.Ok})
+}
+
+func (c *Container) Start(ctx context.Context) {
+	c.positionService.Start(ctx)
+}
+
+func (c *Container) Shutdown(ctx context.Context) error {
+	return c.positionService.Shutdown(ctx)
 }

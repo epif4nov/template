@@ -6,7 +6,10 @@ import (
 	"log/slog"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/epif4nov/template/internal/domain/trip"
+	"github.com/epif4nov/template/internal/infra/telemetry"
 )
 
 // Репозиторий, который ищет устаревшие поездки.
@@ -64,6 +67,7 @@ type Scanner struct {
 	interval   time.Duration
 	staleAfter time.Duration
 	newTicker  tickerFactory
+	signals    *telemetry.Positions
 }
 
 func NewScanner(
@@ -89,8 +93,11 @@ func NewScanner(
 	}, nil
 }
 
+func (s *Scanner) SetSignals(signals *telemetry.Positions) { s.signals = signals }
+
 // Run выполняется в одной фоновой горутине.
 func (s *Scanner) Run(ctx context.Context) {
+	s.logger.Info("position scanner started")
 	ticker := s.newTicker(s.interval)
 	defer ticker.Stop()
 
@@ -110,6 +117,13 @@ func (s *Scanner) Run(ctx context.Context) {
 }
 
 func (s *Scanner) scan(ctx context.Context) {
+	var link trace.SpanContext
+	if s.signals != nil {
+		var span trace.Span
+		ctx, span = s.signals.StartScan(ctx)
+		defer span.End()
+		link = span.SpanContext()
+	}
 	trips, err := s.repo.FindStaleTrips(
 		ctx,
 		s.staleAfter,
@@ -129,7 +143,17 @@ func (s *Scanner) scan(ctx context.Context) {
 			return
 		}
 
-		result := s.queue.Enqueue(t)
+		var result EnqueueResult
+		if linked, ok := s.queue.(interface {
+			EnqueueLinked(trip.StaleTrip, trace.SpanContext) EnqueueResult
+		}); ok {
+			result = linked.EnqueueLinked(t, link)
+		} else {
+			result = s.queue.Enqueue(t)
+		}
+		if s.signals != nil {
+			s.signals.StaleCheck(ctx, string(result))
+		}
 
 		switch result {
 		case Queued:
@@ -145,6 +169,9 @@ func (s *Scanner) scan(ctx context.Context) {
 			)
 
 		case Dropped:
+			if s.signals != nil {
+				s.signals.RequestDropped(ctx)
+			}
 			s.logger.Warn(
 				"position request queue full",
 				"trip_id", t.ID,

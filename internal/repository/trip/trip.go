@@ -32,8 +32,9 @@ type Trip struct {
 
 	Status string
 
-	StartedAt  time.Time
-	FinishedAt *time.Time
+	StartedAt      time.Time
+	FinishedAt     *time.Time
+	LastPositionAt *time.Time
 }
 
 type Repository struct {

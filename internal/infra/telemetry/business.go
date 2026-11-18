@@ -31,15 +31,15 @@ func NewBusiness(mp metric.MeterProvider, logger *slog.Logger) (*Business, error
 	return &Business{created: created, completed: completed, logger: logger}, nil
 }
 
-type createUseCase interface {
+type CreateUseCase interface {
 	Execute(context.Context, create.Input) (*trip.Trip, error)
 }
-type finishUseCase interface {
+type FinishUseCase interface {
 	Execute(context.Context, uuid.UUID) (*trip.Trip, error)
 }
 
 type Create struct {
-	Next    createUseCase
+	Next    CreateUseCase
 	Signals *Business
 }
 
@@ -53,7 +53,7 @@ func (u Create) Execute(ctx context.Context, input create.Input) (*trip.Trip, er
 }
 
 type Finish struct {
-	Next    finishUseCase
+	Next    FinishUseCase
 	Signals *Business
 }
 
