@@ -39,6 +39,7 @@ func TestHTTPPostgresTraceIncludesTransaction(t *testing.T) {
 	cfg := config.Config{
 		DatabaseURL: os.Getenv("DATABASE_URL"), DatabaseMaxConns: 2,
 		DatabaseConnectTimeout: 5 * time.Second, DatabaseQueryTimeout: 5 * time.Second, DatabaseMaxConnLifetime: time.Minute,
+		PositionQueueSize: 10, PositionWorkers: 1, PositionCheckInterval: time.Minute, PositionStaleAfter: time.Minute, PushHTTPURL: "http://localhost:8090", PushRequestTimeout: time.Second,
 	}
 	app, err := container.New(t.Context(), cfg, telemetry.NewLogger(io.Discard, 0), &telemetry.Providers{Traces: tp, Metrics: mp})
 	if err != nil {

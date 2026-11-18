@@ -22,7 +22,7 @@ func TestRequestPosition(t *testing.T) {
 				return
 			}
 			if r.Method != http.MethodPost {
-				http.Error(w, "wrong method", 405)
+				http.Error(w, "wrong method", http.StatusMethodNotAllowed)
 				return
 			}
 			if r.Header.Get("Content-Type") != "application/json" {
@@ -131,5 +131,29 @@ func TestPushTransportError(t *testing.T) {
 	var transportErr *TransportError
 	if !errors.As(err, &transportErr) {
 		t.Fatalf("expected TransportError, got %v", err)
+	}
+}
+
+func TestPushRespectsContextDeadline(t *testing.T) {
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	defer server.Close()
+	defer close(release)
+	gateway, err := New(server.URL, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gateway.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	err = gateway.RequestPosition(ctx, uuid.New(), uuid.New())
+	var transportErr *TransportError
+	if !errors.As(err, &transportErr) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline transport error, got %v", err)
 	}
 }
