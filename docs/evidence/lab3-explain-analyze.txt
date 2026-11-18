@@ -1,0 +1,20 @@
+BEGIN
+INSERT 0 5000
+ANALYZE
+ rows_for_plan
+---------------
+          5001
+(1 row)
+
+                                                                 QUERY PLAN
+---------------------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using trips_active_stale_lookup_idx on trips  (cost=0.29..287.46 rows=1667 width=40) (actual time=0.012..0.048 rows=201 loops=1)
+   Index Cond: (COALESCE(last_position_at, started_at) < (now() - '00:01:00'::interval))
+   Buffers: shared hit=164
+ Planning:
+   Buffers: shared hit=31
+ Planning Time: 0.191 ms
+ Execution Time: 0.085 ms
+(7 rows)
+
+ROLLBACK
