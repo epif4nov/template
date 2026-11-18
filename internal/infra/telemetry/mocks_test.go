@@ -19,32 +19,32 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-// MockCreateUseCase is a mock of CreateUseCase interface.
-type MockCreateUseCase struct {
+// MockcreateUseCase is a mock of createUseCase interface.
+type MockcreateUseCase struct {
 	ctrl     *gomock.Controller
-	recorder *MockCreateUseCaseMockRecorder
+	recorder *MockcreateUseCaseMockRecorder
 	isgomock struct{}
 }
 
-// MockCreateUseCaseMockRecorder is the mock recorder for MockCreateUseCase.
-type MockCreateUseCaseMockRecorder struct {
-	mock *MockCreateUseCase
+// MockcreateUseCaseMockRecorder is the mock recorder for MockcreateUseCase.
+type MockcreateUseCaseMockRecorder struct {
+	mock *MockcreateUseCase
 }
 
-// NewMockCreateUseCase creates a new mock instance.
-func NewMockCreateUseCase(ctrl *gomock.Controller) *MockCreateUseCase {
-	mock := &MockCreateUseCase{ctrl: ctrl}
-	mock.recorder = &MockCreateUseCaseMockRecorder{mock}
+// NewMockcreateUseCase creates a new mock instance.
+func NewMockcreateUseCase(ctrl *gomock.Controller) *MockcreateUseCase {
+	mock := &MockcreateUseCase{ctrl: ctrl}
+	mock.recorder = &MockcreateUseCaseMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockCreateUseCase) EXPECT() *MockCreateUseCaseMockRecorder {
+func (m *MockcreateUseCase) EXPECT() *MockcreateUseCaseMockRecorder {
 	return m.recorder
 }
 
 // Execute mocks base method.
-func (m *MockCreateUseCase) Execute(arg0 context.Context, arg1 create.Input) (*trip.Trip, error) {
+func (m *MockcreateUseCase) Execute(arg0 context.Context, arg1 create.Input) (*trip.Trip, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", arg0, arg1)
 	ret0, _ := ret[0].(*trip.Trip)
@@ -53,37 +53,37 @@ func (m *MockCreateUseCase) Execute(arg0 context.Context, arg1 create.Input) (*t
 }
 
 // Execute indicates an expected call of Execute.
-func (mr *MockCreateUseCaseMockRecorder) Execute(arg0, arg1 any) *gomock.Call {
+func (mr *MockcreateUseCaseMockRecorder) Execute(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockCreateUseCase)(nil).Execute), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockcreateUseCase)(nil).Execute), arg0, arg1)
 }
 
-// MockFinishUseCase is a mock of FinishUseCase interface.
-type MockFinishUseCase struct {
+// MockfinishUseCase is a mock of finishUseCase interface.
+type MockfinishUseCase struct {
 	ctrl     *gomock.Controller
-	recorder *MockFinishUseCaseMockRecorder
+	recorder *MockfinishUseCaseMockRecorder
 	isgomock struct{}
 }
 
-// MockFinishUseCaseMockRecorder is the mock recorder for MockFinishUseCase.
-type MockFinishUseCaseMockRecorder struct {
-	mock *MockFinishUseCase
+// MockfinishUseCaseMockRecorder is the mock recorder for MockfinishUseCase.
+type MockfinishUseCaseMockRecorder struct {
+	mock *MockfinishUseCase
 }
 
-// NewMockFinishUseCase creates a new mock instance.
-func NewMockFinishUseCase(ctrl *gomock.Controller) *MockFinishUseCase {
-	mock := &MockFinishUseCase{ctrl: ctrl}
-	mock.recorder = &MockFinishUseCaseMockRecorder{mock}
+// NewMockfinishUseCase creates a new mock instance.
+func NewMockfinishUseCase(ctrl *gomock.Controller) *MockfinishUseCase {
+	mock := &MockfinishUseCase{ctrl: ctrl}
+	mock.recorder = &MockfinishUseCaseMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockFinishUseCase) EXPECT() *MockFinishUseCaseMockRecorder {
+func (m *MockfinishUseCase) EXPECT() *MockfinishUseCaseMockRecorder {
 	return m.recorder
 }
 
 // Execute mocks base method.
-func (m *MockFinishUseCase) Execute(arg0 context.Context, arg1 uuid.UUID) (*trip.Trip, error) {
+func (m *MockfinishUseCase) Execute(arg0 context.Context, arg1 uuid.UUID) (*trip.Trip, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Execute", arg0, arg1)
 	ret0, _ := ret[0].(*trip.Trip)
@@ -92,7 +92,7 @@ func (m *MockFinishUseCase) Execute(arg0 context.Context, arg1 uuid.UUID) (*trip
 }
 
 // Execute indicates an expected call of Execute.
-func (mr *MockFinishUseCaseMockRecorder) Execute(arg0, arg1 any) *gomock.Call {
+func (mr *MockfinishUseCaseMockRecorder) Execute(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockFinishUseCase)(nil).Execute), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockfinishUseCase)(nil).Execute), arg0, arg1)
 }

@@ -17,12 +17,16 @@ import (
 	createhandler "github.com/epif4nov/template/internal/http/trip/create"
 	finishhandler "github.com/epif4nov/template/internal/http/trip/finish"
 	gethandler "github.com/epif4nov/template/internal/http/trip/get"
+	listpositionhandler "github.com/epif4nov/template/internal/http/trip/positions/list"
+	savepositionhandler "github.com/epif4nov/template/internal/http/trip/positions/save"
 	"github.com/epif4nov/template/internal/infra/postgres/transaction"
 	"github.com/epif4nov/template/internal/infra/telemetry"
 	repository "github.com/epif4nov/template/internal/repository/trip"
 	"github.com/epif4nov/template/internal/usecase/trip/create"
 	"github.com/epif4nov/template/internal/usecase/trip/finish"
 	"github.com/epif4nov/template/internal/usecase/trip/get"
+	listposition "github.com/epif4nov/template/internal/usecase/trip/positions/list"
+	saveposition "github.com/epif4nov/template/internal/usecase/trip/positions/save"
 )
 
 type Container struct {
@@ -119,6 +123,17 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger, signals *t
 		get:    gethandler.New(get.New(repo), cfg.DatabaseQueryTimeout, logger),
 		finish: finishhandler.New(telemetry.Finish{Next: finish.New(repo, tx, now), Signals: business}, cfg.DatabaseQueryTimeout, logger),
 		pool:   pool, timeout: cfg.DatabaseQueryTimeout,
+		savePosition: savepositionhandler.New(
+			saveposition.New(repo, tx, now),
+			cfg.DatabaseQueryTimeout,
+			logger,
+		),
+
+		listPositions: listpositionhandler.New(
+			listposition.New(repo),
+			cfg.DatabaseQueryTimeout,
+			logger,
+		),
 	}
 	router := chi.NewRouter()
 	api.HandlerWithOptions(handler, api.ChiServerOptions{BaseRouter: router, ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
@@ -133,11 +148,13 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger, signals *t
 
 type handlers struct {
 	api.Unimplemented
-	create  *createhandler.Handler
-	get     *gethandler.Handler
-	finish  *finishhandler.Handler
-	pool    interface{ Ping(context.Context) error }
-	timeout time.Duration
+	create        *createhandler.Handler
+	get           *gethandler.Handler
+	finish        *finishhandler.Handler
+	pool          interface{ Ping(context.Context) error }
+	timeout       time.Duration
+	savePosition  *savepositionhandler.Handler
+	listPositions *listpositionhandler.Handler
 }
 
 func (h *handlers) CreateTrip(w http.ResponseWriter, r *http.Request, p api.CreateTripParams) {
@@ -150,6 +167,22 @@ func (h *handlers) GetTrip(w http.ResponseWriter, r *http.Request, id api.TripId
 
 func (h *handlers) FinishTrip(w http.ResponseWriter, r *http.Request, id api.TripId) {
 	h.finish.Handle(w, r, id)
+}
+
+func (h *handlers) CreateTripPosition(
+	w http.ResponseWriter,
+	r *http.Request,
+	id api.TripId,
+) {
+	h.savePosition.Handle(w, r, id)
+}
+
+func (h *handlers) ListTripPositions(
+	w http.ResponseWriter,
+	r *http.Request,
+	id api.TripId,
+) {
+	h.listPositions.Handle(w, r, id)
 }
 
 func (h *handlers) Health(w http.ResponseWriter, _ *http.Request) {
