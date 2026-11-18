@@ -368,12 +368,12 @@ go test -race ./...
 make run
 ```
 
-Для демонстрации отправки создайте поездку через `POST /api/v1/trips`, не присылайте координаты дольше `POSITION_STALE_AFTER` и смотрите `tripgoctl environment logs push-service`. Для демонстрации переполнения запустите сервис с `POSITION_QUEUE_SIZE=10`, создайте 200 активных поездок без координат и наблюдайте `tripgo.stale_checks{result="dropped"}` и `tripgo.position_requests.queue.size` в Grafana. Для медленного Push Service используйте `PUSH_ADMIN_URL` из локального окружения:
+Для демонстрации отправки создайте поездку через `POST /api/v1/trips`, не присылайте координаты дольше `POSITION_STALE_AFTER` и смотрите `tripgoctl environment logs push-service`. Для демонстрации переполнения запустите сервис с `POSITION_QUEUE_SIZE=10`, создайте 200 активных поездок без координат и наблюдайте `tripgo.stale_checks{result="dropped"}` и `tripgo.position_requests.queue.size` в Grafana. Для медленного Push Service используйте `PUSH_HTTP_URL` из локального окружения:
 
 ```bash
-curl -fsS -X POST "$PUSH_ADMIN_URL/admin/behaviour" -H 'Content-Type: application/json' -d '{"latency_ms":5000}'
+curl -fsS -X POST "$PUSH_HTTP_URL/admin/behaviour" -H 'Content-Type: application/json' -d '{"latency_ms":5000}'
 # Проверьте метрики, затем обязательно сбросьте задержку:
-curl -fsS -X POST "$PUSH_ADMIN_URL/admin/behaviour" -H 'Content-Type: application/json' -d '{"latency_ms":0}'
+curl -fsS -X POST "$PUSH_HTTP_URL/admin/behaviour" -H 'Content-Type: application/json' -d '{"latency_ms":0}'
 ```
 
 План выборки проверен через `EXPLAIN (ANALYZE, BUFFERS)` на 5001 строке. Для воспроизведения используйте SQL из описания PR; тестовые 5000 строк добавляются внутри транзакции, которая завершается `ROLLBACK`.

@@ -42,7 +42,7 @@ func TestScannerTickDeduplicatesAndDrops(t *testing.T) {
 	repo := staleRepoFunc(func(_ context.Context, _ time.Duration) ([]trip.StaleTrip, error) {
 		return []trip.StaleTrip{first, second}, nil
 	})
-	s, err := NewScanner(repo, q, testLogger(), time.Second, time.Minute)
+	s, err := NewScanner(repo, q, testLogger(), time.Second, time.Minute, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestScannerRunStopsTicker(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer q.Close()
-	s, err := NewScanner(staleRepoFunc(func(context.Context, time.Duration) ([]trip.StaleTrip, error) { return nil, nil }), q, testLogger(), time.Second, time.Minute)
+	s, err := NewScanner(staleRepoFunc(func(context.Context, time.Duration) ([]trip.StaleTrip, error) { return nil, nil }), q, testLogger(), time.Second, time.Minute, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestServiceShutdownDrainsQueue(t *testing.T) {
 	}
 	s, err := NewScanner(staleRepoFunc(func(context.Context, time.Duration) ([]trip.StaleTrip, error) {
 		return nil, errors.New("unexpected scan")
-	}), q, testLogger(), time.Hour, time.Minute)
+	}), q, testLogger(), time.Hour, time.Minute, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestServiceShutdownCancelsInFlight(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := NewScanner(staleRepoFunc(func(context.Context, time.Duration) ([]trip.StaleTrip, error) { return nil, nil }), q, testLogger(), time.Hour, time.Minute)
+	s, err := NewScanner(staleRepoFunc(func(context.Context, time.Duration) ([]trip.StaleTrip, error) { return nil, nil }), q, testLogger(), time.Hour, time.Minute, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}

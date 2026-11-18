@@ -166,6 +166,7 @@ func New(ctx context.Context, cfg config.Config, logger *slog.Logger, signals *t
 		logger,
 		cfg.PositionCheckInterval,
 		cfg.PositionStaleAfter,
+		cfg.DatabaseQueryTimeout,
 	)
 	if err != nil {
 		pushGateway.Close()

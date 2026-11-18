@@ -61,13 +61,14 @@ func newRealTicker(interval time.Duration) ticker {
 }
 
 type Scanner struct {
-	repo       staleRepository
-	queue      taskQueue
-	logger     *slog.Logger
-	interval   time.Duration
-	staleAfter time.Duration
-	newTicker  tickerFactory
-	signals    *telemetry.Positions
+	repo         staleRepository
+	queue        taskQueue
+	logger       *slog.Logger
+	interval     time.Duration
+	staleAfter   time.Duration
+	queryTimeout time.Duration
+	newTicker    tickerFactory
+	signals      *telemetry.Positions
 }
 
 func NewScanner(
@@ -76,20 +77,22 @@ func NewScanner(
 	logger *slog.Logger,
 	interval time.Duration,
 	staleAfter time.Duration,
+	queryTimeout time.Duration,
 ) (*Scanner, error) {
-	if interval <= 0 || staleAfter <= 0 {
+	if interval <= 0 || staleAfter <= 0 || queryTimeout <= 0 {
 		return nil, fmt.Errorf(
-			"scanner intervals must be positive",
+			"scanner durations must be positive",
 		)
 	}
 
 	return &Scanner{
-		repo:       repo,
-		queue:      queue,
-		logger:     logger,
-		interval:   interval,
-		staleAfter: staleAfter,
-		newTicker:  newRealTicker,
+		repo:         repo,
+		queue:        queue,
+		logger:       logger,
+		interval:     interval,
+		staleAfter:   staleAfter,
+		queryTimeout: queryTimeout,
+		newTicker:    newRealTicker,
 	}, nil
 }
 
@@ -124,10 +127,12 @@ func (s *Scanner) scan(ctx context.Context) {
 		defer span.End()
 		link = span.SpanContext()
 	}
+	queryCtx, cancel := context.WithTimeout(ctx, s.queryTimeout)
 	trips, err := s.repo.FindStaleTrips(
-		ctx,
+		queryCtx,
 		s.staleAfter,
 	)
+	cancel()
 	if err != nil {
 		if ctx.Err() == nil {
 			s.logger.Error(
