@@ -11,7 +11,7 @@ import (
 	"github.com/epif4nov/template/internal/domain/trip"
 )
 
-// Одна задача для будущего воркера.
+// positionTask передаёт воркеру поездку, поколение и контекст трассировки.
 type positionTask struct {
 	Trip       trip.StaleTrip
 	Generation uint64
@@ -46,7 +46,6 @@ func NewQueue(size int) (*Queue, error) {
 	}, nil
 }
 
-// SetSignals attaches the position metrics before the service starts.
 // Enqueue ставит задачу без ожидания свободного места.
 func (q *Queue) Enqueue(t trip.StaleTrip) EnqueueResult {
 	return q.EnqueueLinked(t, trace.SpanContext{})

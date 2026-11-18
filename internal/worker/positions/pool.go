@@ -13,8 +13,7 @@ import (
 	"github.com/epif4nov/template/internal/infra/telemetry"
 )
 
-// Интерфейс отправки запроса на получение координаты.
-// Реализацию HTTP-гейтвея добавим следующим этапом.
+// pushSender отправляет запрос координаты через Push Service.
 type pushSender interface {
 	RequestPosition(
 		ctx context.Context,
