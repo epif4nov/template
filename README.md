@@ -1,6 +1,6 @@
 # TripGo — сервис поездок
 
-Учебный проект курса **«Разработка микросервисов на Go»**. В одном репозитории выполняются пять последовательных лабораторных работ. Текущая ветка — `homework/02`: архитектурный рефакторинг лабораторной работы № 2 на основе работающего API первой работы. Подключены OpenTelemetry, структурированные логи и метрики лабораторной № 2.
+Учебный проект курса **«Разработка микросервисов на Go»**. В одном репозитории выполняются пять последовательных лабораторных работ. Текущая ветка — `homework/03`: координаты поездки, очередь запросов и worker pool поверх работающих лабораторных работ № 1 и № 2.
 
 ## Реализовано в лабораторной работе № 1
 
@@ -19,14 +19,14 @@
 - Установленная утилита `tripgoctl` и доступный Docker daemon.
 - `make` и Bash; для ручных HTTP-проверок — `curl`, для демонстрационного сценария — `jq`.
 
-Локальную инфраструктуру предоставляет [`tripgoctl`](https://github.com/course-go-autumn-2026/course-infra). Для второй работы окружение включает PostgreSQL и observability.
+Локальную инфраструктуру предоставляет [`tripgoctl`](https://github.com/course-go-autumn-2026/course-infra). Для третьей работы окружение включает PostgreSQL, observability и Push Service.
 
 ## Запуск из чистого клона
 
 ```bash
 git clone https://github.com/epif4nov/template.git
 cd template
-git switch homework/02
+git switch homework/03
 
 # Первоначальная настройка кластера (один раз на машине)
 tripgoctl cluster start
@@ -339,3 +339,41 @@ go build и diff --check прошли. Покрытие domain/trip — 97,8%, �
 доступен. Штатный SIGTERM завершил бинарник с кодом 0, закрыл HTTP и снизил
 число его PostgreSQL-сессий с 3 до 0; экспорт при shutdown завершился без ошибок.
 Результат относится к прогону 28.10.2026; повторить команды перед своей сдачей.
+## Опрос устаревших поездок
+
+Лабораторная работа № 3 добавляет маршрут поездки и фоновый запрос координаты у водителя. Поток обработки: **сканер → ограниченная очередь → фиксированный пул воркеров → Push Service**. Сканер на каждом тике одним SQL-запросом получает активные поездки, для которых `COALESCE(last_position_at, started_at) < now() - POSITION_STALE_AFTER`. Результат отсортирован по времени последней координаты и `id`. Индекс `trips_active_stale_lookup_idx` создан отдельной миграцией без транзакции через `CREATE INDEX CONCURRENTLY`.
+
+| Переменная | Значение в `.env.example` | Назначение |
+|---|---:|---|
+| `POSITION_CHECK_INTERVAL` | `30s` | Период опроса и минимальная пауза между повторными запросами по поездке |
+| `POSITION_STALE_AFTER` | `60s` | Время без координат до запроса |
+| `POSITION_WORKERS` | `4` | Число постоянных воркеров |
+| `POSITION_QUEUE_SIZE` | `100` | Ёмкость буферизованного канала |
+| `PUSH_HTTP_URL` | `http://localhost:8090` | Базовый адрес Push Service; в рабочем `.env` подставляется `tripgoctl connect` |
+| `PUSH_REQUEST_TIMEOUT` | `1s` | Дедлайн одного HTTP-запроса к Push Service |
+| `SHUTDOWN_TIMEOUT` | `10s` | Общий бюджет остановки HTTP, сканера, воркеров и телеметрии |
+
+`POST /api/v1/trips/{tripId}/positions` проверяет координаты и `recorded_at`, сохраняет точку и обновляет `last_position_at` в одной транзакции. В SQL используется `GREATEST`, поэтому опоздавшая координата не уменьшает это поле. После успешного коммита ожидающая задача отменяется. `GET /api/v1/trips/{tripId}/positions` отдаёт `{ "positions": [] }` для пустого маршрута и сортирует точки по `recorded_at, id`. `GET /api/v1/trips/{tripId}` включает `last_position_at`, когда координата уже была получена.
+
+Очередь не блокирует сканер. Если она заполнена, новая задача пропускается с логом `Warn` и метрикой `tripgo.stale_checks{result="dropped"}`. Дедупликация хранит поколение задачи под `sync.Mutex`: повторный тик не добавляет дубликат, а завершение старой отменённой задачи не удаляет новую. Поездка без ответа снова попадает в SQL-выборку на следующем тике; отдельного таймера, ретраев и rate limiter нет.
+
+При `SIGINT`/`SIGTERM` HTTP-сервер сначала завершает текущие запросы, затем останавливается сканер, закрывается очередь и воркеры дорабатывают её в пределах оставшегося общего дедлайна. При истечении бюджета контекст Push-запросов отменяется. Затем закрываются HTTP-соединения, PostgreSQL и OTLP SDK.
+
+```bash
+tripgoctl environment start
+tripgoctl connect
+make migrate
+make generate && make build && make test && make lint && make test-integration
+go test -race ./...
+make run
+```
+
+Для демонстрации отправки создайте поездку через `POST /api/v1/trips`, не присылайте координаты дольше `POSITION_STALE_AFTER` и смотрите `tripgoctl environment logs push-service`. Для демонстрации переполнения запустите сервис с `POSITION_QUEUE_SIZE=10`, создайте 200 активных поездок без координат и наблюдайте `tripgo.stale_checks{result="dropped"}` и `tripgo.position_requests.queue.size` в Grafana. Для медленного Push Service используйте `PUSH_ADMIN_URL` из локального окружения:
+
+```bash
+curl -fsS -X POST "$PUSH_ADMIN_URL/admin/behaviour" -H 'Content-Type: application/json' -d '{"latency_ms":5000}'
+# Проверьте метрики, затем обязательно сбросьте задержку:
+curl -fsS -X POST "$PUSH_ADMIN_URL/admin/behaviour" -H 'Content-Type: application/json' -d '{"latency_ms":0}'
+```
+
+План выборки проверен через `EXPLAIN (ANALYZE, BUFFERS)` на 5001 строке. Для воспроизведения используйте SQL из описания PR; тестовые 5000 строк добавляются внутри транзакции, которая завершается `ROLLBACK`.
